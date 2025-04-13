@@ -13,44 +13,19 @@ from shapely.affinity import translate
 from matplotlib.widgets import Slider, Button
 from pyproj import Transformer
 from matplotlib.lines import Line2D
-import pandas as pd
-import geopandas as gpd
-import os
-# gpd.options.io_engine = 'fiona'
-# import shapely
-# print(ox.__version__)
-# print(shapely.__version__)
-#每分钟的的阴影更新一次
+
 # 在代码开头处定义图例句柄
 shortest_route_legend = Line2D([0], [0], color='red', linewidth=2, label='Shortest Bike Route')
 wanted_route_legend = Line2D([0], [0], color='green', linewidth=2, label='Wanted Bike Route')
 
-
-bldg_gml_files = [
-    r"bldg\51357451_bldg_6697_op.gml",
-    r"bldg\51357452_bldg_6697_op.gml",
-    r"bldg\51357453_bldg_6697_op.gml"
-]
-
-# 读取每个 GML 文件并存储到列表中
-bldg_gdf_list = [gpd.read_file(file) for file in bldg_gml_files]
-
-# 合并所有 GeoDataFrame
-bldg_merged_gdf = pd.concat(bldg_gdf_list, ignore_index=True)
 # -------------------------
-road_gml_files = [
-    r"tran\51357451_tran_6697_op.gml",
-    r"tran\51357452_tran_6697_op.gml",
-    r"tran\51357453_tran_6697_op.gml"
-    # 以及其它所有 road gml
-]
+# 数据加载与坐标处理
+# -------------------------
+building_gml_file = r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\bldg\51357451_bldg_6697_op.gml"
+road_gml_file = r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\tran\51357451_tran_6697_op.gml"
 
-road_gdf_list = [gpd.read_file(file) for file in road_gml_files]
-merged_road_gdf = pd.concat(road_gdf_list, ignore_index=True)
-
-
-building_gdf = bldg_merged_gdf
-road_gdf = merged_road_gdf
+building_gdf = gpd.read_file(building_gml_file)
+road_gdf = gpd.read_file(road_gml_file)
 
 # 确保投影为EPSG:6669
 if building_gdf.crs.to_epsg() != 6669:
@@ -58,145 +33,80 @@ if building_gdf.crs.to_epsg() != 6669:
 if road_gdf.crs.to_epsg() != 6669:
     road_gdf = road_gdf.to_crs(epsg=6669)
 
-# # -------------------------
-# # 计算太阳高度角和方位角
-# # -------------------------
-# city = LocationInfo(name="Osaka", region="Japan", timezone="Asia/Tokyo", latitude=34.6937, longitude=135.5023)
-# date_time = datetime(2024, 12, 5, 13, 10, tzinfo=timezone(timedelta(hours=9)))
-#
-# solar_elevation = elevation(city.observer, date_time)
-# solar_azimuth = azimuth(city.observer, date_time)
-#
-# print(f"太阳高度角: {solar_elevation:.2f}°")
-# print(f"太阳方位角: {solar_azimuth:.2f}°")
-#
-# if solar_elevation <= 0:
-#     print("太阳位于地平线以下，无法生成阴影。")
-#     exit()
-#
-# sun_vector = np.array([
-#     np.cos(np.radians(solar_elevation)) * np.sin(np.radians(solar_azimuth)),
-#     np.cos(np.radians(solar_elevation)) * np.cos(np.radians(solar_azimuth)),
-#     np.sin(np.radians(solar_elevation))
-# ])
-#
-# # 查找高度列
-# height_column = None
-# for col in building_gdf.columns:
-#     if 'height' in col.lower():
-#         height_column = col
-#         break
-#
-# if height_column is not None:
-#     building_gdf[height_column] = building_gdf[height_column].fillna(3)
-# else:
-#     print("没有找到高度列，将默认高度设为3米用于计算阴影。")
-#     height_column = 'default_height'
-#     building_gdf[height_column] = 3.0
-#
-# # -------------------------
-# # 阴影计算函数
-# # -------------------------
-# def shadow_using_lines(geometry, height):
-#     if sun_vector[2] <= 0:
-#         return None
-#     polygons = geometry.geoms if geometry.geom_type == 'MultiPolygon' else [geometry]
-#     shadow_lines = []
-#
-#     for poly in polygons:
-#         base_coords = [(x, y) for x, y, *rest in poly.exterior.coords]
-#         shadow_coords = [
-#             (
-#                 x - height / np.tan(np.radians(solar_elevation)) * sun_vector[0],
-#                 y - height / np.tan(np.radians(solar_elevation)) * sun_vector[1]
-#             )
-#             for x, y in base_coords
-#         ]
-#
-#         for base, shadow in zip(base_coords, shadow_coords):
-#             shadow_lines.append(LineString([base, shadow]))
-#
-#     union_lines = unary_union(shadow_lines)
-#     shadow_polygon = union_lines.convex_hull
-#     return shadow_polygon
-#
-# # -------------------------
-# # 为每个建筑物生成阴影
-# # -------------------------
-# building_gdf['shadow'] = building_gdf.apply(
-#     lambda row: shadow_using_lines(row.geometry, row[height_column]), axis=1
-# )
-#
-# if 'shadow' not in building_gdf.columns or building_gdf['shadow'].isnull().all():
-#     print("未生成任何有效阴影。请检查数据或逻辑。")
-#     exit()
-#
-# shadow_gdf = building_gdf.dropna(subset=['shadow']).set_geometry('shadow')
-def calculate_shadow_stats(route_gdf, time_to_union, start_time, coef, sample_interval=60):
-    speed = 10 * 1000 / 3600  # 10km/h -> m/s
-
-    current_time = start_time
-
-    shadow_distance = 0.0
-    non_shadow_distance = 0.0
-    total_distance = 0.0
-
-    for idx, row in route_gdf.iterrows():
-        edge_geom = row.geometry
-        edge_length = edge_geom.length
-        travel_time_s = edge_length / speed
-
-        temp_time = current_time
-        remaining_time = travel_time_s
-
-        while remaining_time > 0:
-            dt = min(sample_interval, remaining_time)
-            mid_time = temp_time + timedelta(seconds=dt / 2)
-
-            nearest_time = find_nearest_time(time_to_union.keys(), mid_time)
-            shadow_union = time_to_union[nearest_time]
-
-            if shadow_union:
-                inters = edge_geom.intersection(shadow_union)
-                shadow_len = inters.length if not inters.is_empty else 0
-            else:
-                shadow_len = 0
-
-            ratio = dt / travel_time_s
-            shadow_ratio = shadow_len / edge_length if edge_length > 0 else 0
-
-            shadow_distance += edge_length * shadow_ratio * ratio
-            non_shadow_distance += edge_length * (1 - shadow_ratio) * ratio
-
-            temp_time += timedelta(seconds=dt)
-            remaining_time -= dt
-
-        current_time += timedelta(seconds=travel_time_s)
-        total_distance += edge_length
-
-    print(f"阴影下路程: {shadow_distance:.2f} m, 非阴影下路程: {non_shadow_distance:.2f} m, 总路程: {total_distance:.2f} m")
-
-
-import pickle
-# 指定时间
+# -------------------------
+# 计算太阳高度角和方位角
+# -------------------------
+city = LocationInfo(name="Osaka", region="Japan", timezone="Asia/Tokyo", latitude=34.6937, longitude=135.5023)
 date_time = datetime(2024, 12, 5, 13, 10, tzinfo=timezone(timedelta(hours=9)))
-# 加载提前计算好的阴影文件（里面是 time_to_union = {datetime: shapely geometry}）
-shadow_file = "shadows_20241205_1300_1400_1min.pkl"
-with open(shadow_file, 'rb') as f:
-    time_to_union = pickle.load(f)
-# 找最近时刻
-def find_nearest_time(keys, target):
-    return min(keys, key=lambda t: abs(t - target))
 
-nearest_time = find_nearest_time(time_to_union.keys(), date_time)
-shadow_union = time_to_union[nearest_time]
+solar_elevation = elevation(city.observer, date_time)
+solar_azimuth = azimuth(city.observer, date_time)
 
-if shadow_union is None:
-    print("该时刻太阳在地平线以下，或无有效阴影。")
+print(f"太陽高度角: {solar_elevation:.2f}°")
+print(f"太陽方位角: {solar_azimuth:.2f}°")
+
+if solar_elevation <= 0:
+    print("太陽は地平線の下にあり、影を作ることができない")
     exit()
 
-# 构造 shadow_gdf 以便你后续绘图
-shadow_gdf = gpd.GeoDataFrame(geometry=[shadow_union], crs='EPSG:6669')  # 用你建筑的坐标系
+sun_vector = np.array([
+    np.cos(np.radians(solar_elevation)) * np.sin(np.radians(solar_azimuth)),
+    np.cos(np.radians(solar_elevation)) * np.cos(np.radians(solar_azimuth)),
+    np.sin(np.radians(solar_elevation))
+])
+
+# 查找高度列
+height_column = None
+for col in building_gdf.columns:
+    if 'height' in col.lower():
+        height_column = col
+        break
+
+if height_column is not None:
+    building_gdf[height_column] = building_gdf[height_column].fillna(3)
+else:
+    print("高度の列が見つからなかったため、デフォルトの高さを3メートルとして影を計算します。")
+    height_column = 'default_height'
+    building_gdf[height_column] = 3.0
+
+# -------------------------
+# 阴影计算函数
+# -------------------------
+def shadow_using_lines(geometry, height):
+    if sun_vector[2] <= 0:
+        return None
+    polygons = geometry.geoms if geometry.geom_type == 'MultiPolygon' else [geometry]
+    shadow_lines = []
+
+    for poly in polygons:
+        base_coords = [(x, y) for x, y, *rest in poly.exterior.coords]
+        shadow_coords = [
+            (
+                x - height / np.tan(np.radians(solar_elevation)) * sun_vector[0],
+                y - height / np.tan(np.radians(solar_elevation)) * sun_vector[1]
+            )
+            for x, y in base_coords
+        ]
+
+        for base, shadow in zip(base_coords, shadow_coords):
+            shadow_lines.append(LineString([base, shadow]))
+
+    union_lines = unary_union(shadow_lines)
+    shadow_polygon = union_lines.convex_hull
+    return shadow_polygon
+
+# -------------------------
+# 为每个建筑物生成阴影
+# -------------------------
+building_gdf['shadow'] = building_gdf.apply(
+    lambda row: shadow_using_lines(row.geometry, row[height_column]), axis=1
+)
+
+if 'shadow' not in building_gdf.columns or building_gdf['shadow'].isnull().all():
+    print("有効な影が生成されませんでした。データまたはロジックを確認してください。")
+    exit()
+
+shadow_gdf = building_gdf.dropna(subset=['shadow']).set_geometry('shadow')
 
 # -------------------------
 # 准备绘图
@@ -224,7 +134,7 @@ legend_handles = [
     Patch(facecolor='lightblue', label='Building'),
     Patch(facecolor='gray', edgecolor='black', label='Shadow'),
 ]
-plt.title("Roads, buildings, and shadows     ↑North", fontsize=16)
+plt.title("Roads, buildings, and shadows     ↑North\n大阪府　大阪市　阿倍野区　桃ケ池町１丁目", fontsize=16)
 plt.legend(handles=legend_handles, loc='upper right')
 plt.xlabel("X (m)")
 plt.ylabel("Y (m)")
@@ -241,23 +151,11 @@ building_bounds_wgs84 = building_gdf_wgs84.total_bounds  # (minx, miny, maxx, ma
 # bbox顺序：(北, 南, 东, 西)
 bbox = (building_bounds_wgs84[3], building_bounds_wgs84[1],
         building_bounds_wgs84[2], building_bounds_wgs84[0])
-#下载osm或者是加载已经有的
-map_id = f"{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}"
-osm_file = f"osmnx_graph_{map_id}.pkl"
-
-if os.path.exists(osm_file):
-    print(f"加载本地OSM数据: {osm_file}")
-    with open(osm_file, "rb") as f:
-        G = pickle.load(f)
-else:
-    print("开始下载OSM数据...")
-    G = ox.graph_from_bbox(north=bbox[0], south=bbox[1], east=bbox[2], west=bbox[3], network_type="bike")
-    print('下载完成')
-    with open(osm_file, "wb") as f:
-        pickle.dump(G, f)
-
-print(f"节点数量: {len(G.nodes)}")
-print(f"边数量: {len(G.edges)}")
+print('downlaoding OSM data...')
+print('bbox:', bbox)
+G = ox.graph_from_bbox(north=bbox[0], south=bbox[1], east=bbox[2], west=bbox[3], network_type="bike")
+print(f"number of nodes: {len(G.nodes)}")
+print(f"number of edges: {len(G.edges)}")
 
 # 将图转换为GeoDataFrame，并投影为EPSG:6669以计算长度和阴影覆盖
 gdf_edges = ox.graph_to_gdfs(G, nodes=False)
@@ -297,7 +195,7 @@ def on_map_click(event):
         origin_marker = ax.plot(x_coord, y_coord, marker='o', color='blue', markersize=10, label='Origin')[0]
         plt.draw()
         click_count += 1
-        print(f"已选择起点: (lat={lat}, lon={lon})")
+        print(f"start: (lat={lat}, lon={lon})")
     elif click_count == 1:
         # 第二次点击，设置终点
         destination_point_wgs84 = (lat, lon)
@@ -306,50 +204,31 @@ def on_map_click(event):
         destination_marker = ax.plot(x_coord, y_coord, marker='o', color='magenta', markersize=10, label='Destination')[0]
         plt.draw()
         click_count += 1
-        print(f"已选择终点: (lat={lat}, lon={lon})")
+        print(f"end: (lat={lat}, lon={lon})")
 
 fig.canvas.mpl_connect('button_press_event', on_map_click)
-start_time=date_time
-def update_cool_route(coef, start_time, sample_interval=60):
+
+def update_cool_route(coef):
     shadow_lengths = []
-
-    current_time = start_time
-    speed = 10 * 1000 / 3600  # m/s
-
     for idx, row in gdf_edges.iterrows():
         edge_geom = row.geometry
         edge_length = edge_geom.length
-        travel_time_s = edge_length / speed
-
-        temp_time = current_time
-        remaining_time = travel_time_s
-
-        cost = 0.0
-
-        while remaining_time > 0:
-            dt = min(sample_interval, remaining_time)
-            mid_time = temp_time + timedelta(seconds=dt / 2)
-
-            nearest_time = find_nearest_time(time_to_union.keys(), mid_time)
-            shadow_union = time_to_union[nearest_time]
-
-            inters = edge_geom.intersection(shadow_union) if shadow_union else None
-            shadow_len = inters.length if inters and not inters.is_empty else 0
-
-            shadow_ratio = shadow_len / edge_length if edge_length > 0 else 0
-
-            sunny_dist = edge_length * (1 - shadow_ratio)
-            cost += (sunny_dist + coef * edge_length) * (dt / travel_time_s)
-
-            temp_time += timedelta(seconds=dt)
-            remaining_time -= dt
-
+        intersection_geom = edge_geom.intersection(shadow_union)
+        shadowed_length = intersection_geom.length if not intersection_geom.is_empty else 0
+        shadow_ratio = shadowed_length / edge_length if edge_length > 0 else 0
+        # 更新了cost的逻辑
+        sunny_dist = edge_length * (1 - shadow_ratio)
+        cost = sunny_dist + coef * edge_length
+        #cost = edge_length * (1 - coef * shadow_ratio)
         shadow_lengths.append(cost)
-        current_time += timedelta(seconds=travel_time_s)
-
+# 当 coef 取 0 时，cost = sunny_distance，只关心阳光下行驶的绝对距离最小。
+# 当 coef 取 1 时，cost = sunny_distance + edge_length，同时兼顾“阳光下行驶的绝对距离最小”和“总路程不能太离谱”。
+# 用户在滑动条上选择 0.3 或 0.5，可以控制路线是更偏向避太阳，还是更偏向走最短路。
+# 这种 cost 设计，能够有效避免仅仅提高阴影比例，但实际在阳光下行驶的绝对距离并没有减少的情况。既能减少阳光暴露，又能控制绕路成本，是更加合理和实用的设计。
     gdf_edges['cool_weight'] = shadow_lengths
-    for (u, v, k), val in zip(gdf_edges.index, gdf_edges['cool_weight']):
-        if (u, v, k) in G.edges:
+
+    for (u,v,k), val in zip(gdf_edges.index, gdf_edges['cool_weight']):
+        if (u,v,k) in G.edges:
             G[u][v][k]['cool_weight'] = val
 
     if origin_point_wgs84 is None or destination_point_wgs84 is None:
@@ -359,7 +238,7 @@ def update_cool_route(coef, start_time, sample_interval=60):
     dest_node = ox.distance.nearest_nodes(G, X=destination_point_wgs84[1], Y=destination_point_wgs84[0])
 
     new_cool_route = nx.shortest_path(G, source=orig_node, target=dest_node, weight='cool_weight')
-    new_cool_route_edges = [(new_cool_route[i], new_cool_route[i + 1], 0) for i in range(len(new_cool_route) - 1)]
+    new_cool_route_edges = [(new_cool_route[i], new_cool_route[i+1], 0) for i in range(len(new_cool_route)-1)]
     new_cool_route_gdf = gdf_edges.loc[new_cool_route_edges]
 
     new_cool_route_gdf = new_cool_route_gdf.copy()
@@ -393,7 +272,7 @@ button_update = Button(ax_button_update, 'Update Route')
 
 def update_route(event):
     coef_val = coef_slider.val
-    new_route_gdf = update_cool_route(coef_val,start_time)
+    new_route_gdf = update_cool_route(coef_val)
 
     for artist in ax.lines + ax.collections:
         if artist.get_label() == 'Wanted Bike Route':
@@ -405,9 +284,6 @@ def update_route(event):
     plt.legend(handles=[shortest_route_legend, wanted_route_legend,], loc='upper right',          # 图例框锚点在图例的左上角
     bbox_to_anchor=(-2, 1.05))
     plt.draw()
-    print("wanted route:")
-    calculate_shadow_stats(new_route_gdf, time_to_union, start_time, coef=coef_slider.val)
-
 
 button_update.on_clicked(update_route)
 
@@ -424,7 +300,7 @@ button_generate = Button(ax_button_generate, 'Generate Path')
 
 def generate_path(event):
     if origin_point_wgs84 is None or destination_point_wgs84 is None:
-        print("请先在地图上点击选择起点和终点。")
+        print("Please click on the map to select the starting point and destination first.")
         return
 
     orig_node = ox.distance.nearest_nodes(G, X=origin_point_wgs84[1], Y=origin_point_wgs84[0])
@@ -443,21 +319,17 @@ def generate_path(event):
 
     # Wanted Bike Route
     coef_val = coef_slider.val
-    new_route_gdf = update_cool_route(coef_val, start_time)
+    new_route_gdf = update_cool_route(coef_val)
 
     for artist in ax.lines + ax.collections:
         if artist.get_label() == 'Wanted Bike Route':
             artist.remove()
-    print("shortest route:")
-    calculate_shadow_stats(route_gdf, time_to_union, start_time, coef=coef_slider.val)
 
     if new_route_gdf is not None:
         new_route_gdf.plot(ax=ax, color='green', linewidth=2, label='Wanted Bike Route')
     plt.legend(handles=[shortest_route_legend, wanted_route_legend,], loc='upper right',          # 图例框锚点在图例的左上角
     bbox_to_anchor=(-2, 1.05))
     plt.draw()
-    print("wanted route:")
-    calculate_shadow_stats(new_route_gdf, time_to_union, start_time, coef=coef_slider.val)
 
 button_generate.on_clicked(generate_path)
 
