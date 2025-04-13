@@ -14,6 +14,11 @@ from matplotlib.widgets import Slider, Button
 from pyproj import Transformer
 from matplotlib.lines import Line2D
 import pandas as pd
+import geopandas as gpd
+# gpd.options.io_engine = 'fiona'
+# import shapely
+# print(ox.__version__)
+# print(shapely.__version__)
 #每分钟的的阴影更新一次
 # 在代码开头处定义图例句柄
 shortest_route_legend = Line2D([0], [0], color='red', linewidth=2, label='Shortest Bike Route')
@@ -437,13 +442,15 @@ def generate_path(event):
     for artist in ax.lines + ax.collections:
         if artist.get_label() == 'Wanted Bike Route':
             artist.remove()
+    print("shortest route:")
+    calculate_shadow_stats(route_gdf, time_to_union, start_time, coef=coef_slider.val)
 
     if new_route_gdf is not None:
         new_route_gdf.plot(ax=ax, color='green', linewidth=2, label='Wanted Bike Route')
     plt.legend(handles=[shortest_route_legend, wanted_route_legend,], loc='upper right',          # 图例框锚点在图例的左上角
     bbox_to_anchor=(-2, 1.05))
     plt.draw()
-    print("shortest route:")
+    print("wanted route:")
     calculate_shadow_stats(route_gdf, time_to_union, start_time, coef=coef_slider.val)
 
 button_generate.on_clicked(generate_path)
