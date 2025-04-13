@@ -83,9 +83,9 @@ def precompute_shadow_unions(building_gdf, start_dt, end_dt, interval_minutes=10
 #######################################
 
 bldg_gml_files = [
-    r"C:\Users\79152\Downloads\27100_osaka-shi_city_2022_citygml_3_op\udx\bldg\51357451_bldg_6697_op.gml",
-    r"C:\Users\79152\Downloads\27100_osaka-shi_city_2022_citygml_3_op\udx\bldg\51357452_bldg_6697_op.gml",
-    r"C:\Users\79152\Downloads\27100_osaka-shi_city_2022_citygml_3_op\udx\bldg\51357453_bldg_6697_op.gml"
+    r"bldg\51357451_bldg_6697_op.gml",
+    r"bldg\51357452_bldg_6697_op.gml",
+    r"bldg\51357453_bldg_6697_op.gml"
 ]
 
 bldg_gdf_list = [gpd.read_file(file) for file in bldg_gml_files]
@@ -109,9 +109,9 @@ else:
 # 设置时间段
 #######################################
 
-start_dt = datetime(2024, 12, 5, 8, tzinfo=timezone(timedelta(hours=9)))
-end_dt = datetime(2024, 12, 5, 16, tzinfo=timezone(timedelta(hours=9)))
-interval_minutes = 30
+start_dt = datetime(2024, 12, 5, 13, tzinfo=timezone(timedelta(hours=9)))
+end_dt = datetime(2024, 12, 5, 14, tzinfo=timezone(timedelta(hours=9)))
+interval_minutes = 1
 
 #######################################
 # 开始批量计算并存储
