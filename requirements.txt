@@ -5,10 +5,10 @@ matplotlib==3.10.1
 networkx==3.3
 numpy==2.2.4
 osmium==3.7.0
-osmnx==2.0.2
+osmnx==1.9.3
 pandas==2.2.3
 pyproj==3.6.1
 pytz==2024.1
 Requests==2.32.3
-scipy==1.15.2
-Shapely==2.1.0
+scipy==1.13.1
+Shapely==2.0.4
