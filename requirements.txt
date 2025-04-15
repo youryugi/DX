@@ -1,0 +1,14 @@
+astral==3.2
+folium==0.17.0
+geopandas==0.14.4
+matplotlib==3.10.1
+networkx==3.3
+numpy==2.2.4
+osmium==3.7.0
+osmnx==2.0.2
+pandas==2.2.3
+pyproj==3.6.1
+pytz==2024.1
+Requests==2.32.3
+scipy==1.15.2
+Shapely==2.1.0
