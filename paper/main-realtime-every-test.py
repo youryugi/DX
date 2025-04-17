@@ -20,6 +20,9 @@ import time
 import pickle
 #每分钟的的阴影更新一次
 #不输出不同coef下的所有情况
+# 统计 intersection 次数
+intersection_counter = 0
+
 # 在代码开头处定义图例句柄
 shortest_route_legend = Line2D([0], [0], color='red', linewidth=2, label='Shortest Bike Route')
 wanted_route_legend = Line2D([0], [0], color='green', linewidth=2, label='Wanted Bike Route')
@@ -83,7 +86,7 @@ if road_gdf.crs.to_epsg() != 6669:
 
 def calculate_shadow_stats(route_gdf, time_to_union, start_time, coef, sample_interval=60):
     speed = 10 * 1000 / 3600  # 10km/h -> m/s
-
+    global intersection_counter
     current_time = start_time
 
     shadow_distance = 0.0
@@ -106,6 +109,8 @@ def calculate_shadow_stats(route_gdf, time_to_union, start_time, coef, sample_in
             shadow_union = time_to_union[nearest_time]
 
             if shadow_union:
+
+                intersection_counter += 1
                 inters = edge_geom.intersection(shadow_union)
                 shadow_len = inters.length if not inters.is_empty else 0
             else:
@@ -124,7 +129,7 @@ def calculate_shadow_stats(route_gdf, time_to_union, start_time, coef, sample_in
         total_distance += edge_length
 
     print(f"阴影下路程: {shadow_distance:.2f} m, 非阴影下路程: {non_shadow_distance:.2f} m, 总路程: {total_distance:.2f} m")
-
+    print("计算了",intersection_counter)
 
 import pickle
 # 指定时间
@@ -303,6 +308,8 @@ def on_map_click(event):
 fig.canvas.mpl_connect('button_press_event', on_map_click)
 start_time=date_time
 def update_cool_route(coef, start_time, sample_interval=300):
+    intersection_counter = 0
+    intersection_total_time = 0.0
     """
     实现更加严谨的“多状态时变 Dijkstra”：
       - 同一节点可在不同时间到达时，同时保留多条可能路径，
@@ -355,15 +362,24 @@ def update_cool_route(coef, start_time, sample_interval=300):
             nearest_t = find_nearest_time(time_to_union.keys(), mid_time)
             shadow_poly = time_to_union[nearest_t] if nearest_t else None
 
-            t1 = time.time()
+            #t1 = time.time()
             if shadow_poly:
+                nonlocal intersection_counter, intersection_total_time
+                intersection_counter += 1
+
+                t1 = time.time()
                 inters = edge_geom.intersection(shadow_poly)
+                t2 = time.time()
+
+                intersection_total_time += (t2 - t1)
+
                 shadow_len = inters.length if (inters and not inters.is_empty) else 0.0
             else:
                 shadow_len = 0.0
-            t2 = time.time()
 
-            print(f'intersection耗时: {t2 - t1:.4f}s')
+           # t2 = time.time()
+
+           # print(f'intersection耗时: {t2 - t1:.4f}s')
             shadow_ratio = shadow_len / edge_length if edge_length > 0 else 0.0
             sunny_dist = edge_length * (1 - shadow_ratio)
 
@@ -535,6 +551,8 @@ def update_cool_route(coef, start_time, sample_interval=300):
 
     print(f"最终时变路线: 节点数={len(route_nodes)}, cost={final_cost:.3f}, " +
           f"到达时间=+{final_time_s:.1f}秒(相对于出发时刻)")
+    print(f"本次路径计算共执行了 {intersection_counter} 次 intersection() 操作")
+    print(f"所有 intersection() 总耗时: {intersection_total_time:.4f} 秒")
 
     return new_cool_route_gdf
 
@@ -635,88 +653,88 @@ def generate_path(event):
     print("wanted route:")
     calculate_shadow_stats(new_route_gdf, time_to_union, start_time, coef=coef_slider.val)
 
-    # ==================增加在coef在0-10的情况下，对所有
-    import pandas as pd
-    import numpy as np
-
-    # 存放所有结果
-    results = []
-
-    # coef从0到1，步长0.1
-    coef_values = np.arange(coef_val, coef_val+1, 1)
-
-    # 起点终点位置
-    orig_node = ox.distance.nearest_nodes(G, X=origin_point_wgs84[1], Y=origin_point_wgs84[0])
-    dest_node = ox.distance.nearest_nodes(G, X=destination_point_wgs84[1], Y=destination_point_wgs84[0])
-
-    # 计算路径长度、阴影、阳光的函数
-    def calc_length(gdf):
-        total = 0
-        sunny = 0
-        shadow = 0
-        for idx, row in gdf.iterrows():
-            edge_geom = row.geometry
-            length = edge_geom.length
-            inter = edge_geom.intersection(shadow_union)
-            shadow_len = inter.length if not inter.is_empty else 0
-            sunny_len = length - shadow_len if length > 0 else 0
-            total += length
-            sunny += sunny_len
-            shadow += shadow_len
-        return total, sunny, shadow
-
-    # 遍历所有coef
-    for coef in coef_values:
-        print(f"正在计算 coef = {coef}")
-
-        # 用严谨时变算法计算路径
-        route_gdf = update_cool_route(coef, start_time)
-
-        if route_gdf is None:
-            print(f"coef={coef} 没有找到路径，跳过")
-            continue
-
-        total, sunny, shadow = calc_length(route_gdf)
-
-        results.append([coef, total, sunny, shadow])
-
-    # 额外统计最短距离路径 (完全无视阴影)
-    print("正在计算 最短路径（纯距离最短）")
-
-    shortest_route = nx.shortest_path(G, source=orig_node, target=dest_node, weight='length')
-
-    # 匹配真实的(u,v,k)边
-    shortest_edges = []
-    for i in range(len(shortest_route) - 1):
-        u = shortest_route[i]
-        v = shortest_route[i + 1]
-        found_k = None
-        if (u, v, 0) in gdf_edges.index:
-            found_k = 0
-        else:
-            for k in G[u][v].keys():
-                if (u, v, k) in gdf_edges.index:
-                    found_k = k
-                    break
-        if found_k is not None:
-            shortest_edges.append((u, v, found_k))
-        else:
-            print(f"warning: 无法找到({u}->{v})的边")
-
-    shortest_gdf = gdf_edges.loc[shortest_edges]
-
-    shortest_total, shortest_sunny, shortest_shadow = calc_length(shortest_gdf)
-
-    results.append(['Shortest', shortest_total, shortest_sunny, shortest_shadow])
-
-    # 保存结果
-    df = pd.DataFrame(results, columns=[
-        'coef', 'total_length', 'sunny_length', 'shadow_length'
-    ])
-
-    df.to_excel('route_length_analysis_everyminute_big_only1.xlsx', index=False)
-
-    print("所有结果已保存到 route_length_analysis_everyminute_big_only1.xlsx")
+    # # ==================增加在coef在0-10的情况下，对所有
+    # import pandas as pd
+    # import numpy as np
+    #
+    # # 存放所有结果
+    # results = []
+    #
+    # # coef从0到1，步长0.1
+    # coef_values = np.arange(coef_val, coef_val+1, 1)
+    #
+    # # 起点终点位置
+    # orig_node = ox.distance.nearest_nodes(G, X=origin_point_wgs84[1], Y=origin_point_wgs84[0])
+    # dest_node = ox.distance.nearest_nodes(G, X=destination_point_wgs84[1], Y=destination_point_wgs84[0])
+    #
+    # # 计算路径长度、阴影、阳光的函数
+    # def calc_length(gdf):
+    #     total = 0
+    #     sunny = 0
+    #     shadow = 0
+    #     for idx, row in gdf.iterrows():
+    #         edge_geom = row.geometry
+    #         length = edge_geom.length
+    #         inter = edge_geom.intersection(shadow_union)
+    #         shadow_len = inter.length if not inter.is_empty else 0
+    #         sunny_len = length - shadow_len if length > 0 else 0
+    #         total += length
+    #         sunny += sunny_len
+    #         shadow += shadow_len
+    #     return total, sunny, shadow
+    #
+    # # 遍历所有coef
+    # for coef in coef_values:
+    #     print(f"正在计算 coef = {coef}")
+    #
+    #     # 用严谨时变算法计算路径
+    #     route_gdf = update_cool_route(coef, start_time)
+    #
+    #     if route_gdf is None:
+    #         print(f"coef={coef} 没有找到路径，跳过")
+    #         continue
+    #
+    #     total, sunny, shadow = calc_length(route_gdf)
+    #
+    #     results.append([coef, total, sunny, shadow])
+    #
+    # # 额外统计最短距离路径 (完全无视阴影)
+    # print("正在计算 最短路径（纯距离最短）")
+    #
+    # shortest_route = nx.shortest_path(G, source=orig_node, target=dest_node, weight='length')
+    #
+    # # 匹配真实的(u,v,k)边
+    # shortest_edges = []
+    # for i in range(len(shortest_route) - 1):
+    #     u = shortest_route[i]
+    #     v = shortest_route[i + 1]
+    #     found_k = None
+    #     if (u, v, 0) in gdf_edges.index:
+    #         found_k = 0
+    #     else:
+    #         for k in G[u][v].keys():
+    #             if (u, v, k) in gdf_edges.index:
+    #                 found_k = k
+    #                 break
+    #     if found_k is not None:
+    #         shortest_edges.append((u, v, found_k))
+    #     else:
+    #         print(f"warning: 无法找到({u}->{v})的边")
+    #
+    # shortest_gdf = gdf_edges.loc[shortest_edges]
+    #
+    # shortest_total, shortest_sunny, shortest_shadow = calc_length(shortest_gdf)
+    #
+    # results.append(['Shortest', shortest_total, shortest_sunny, shortest_shadow])
+    #
+    # # 保存结果
+    # df = pd.DataFrame(results, columns=[
+    #     'coef', 'total_length', 'sunny_length', 'shadow_length'
+    # ])
+    #
+    # df.to_excel('route_length_analysis_everyminute_big_only1.xlsx', index=False)
+    #
+    # print("所有结果已保存到 route_length_analysis_everyminute_big_only1.xlsx")
 
 
 # ============================================================================================

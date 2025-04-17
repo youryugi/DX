@@ -561,7 +561,7 @@ def generate_path(event):
 
     # ==================增加在coef在0-10的情况下，对所有
     results = []
-    coef_values = np.arange(0, 1.1, 0.1)
+    coef_values = np.arange(0.9, 1.0, 0.1)
 
     orig_node = ox.distance.nearest_nodes(G, X=origin_point_wgs84[1], Y=origin_point_wgs84[0])
     dest_node = ox.distance.nearest_nodes(G, X=destination_point_wgs84[1], Y=destination_point_wgs84[0])
