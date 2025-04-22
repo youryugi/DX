@@ -8,7 +8,7 @@ from astral.sun import elevation, azimuth
 from datetime import datetime, timedelta, timezone
 import pickle
 
-
+interval_minutes=10
 #######################################
 # 函数1：计算单个时间点的合并阴影
 #######################################
@@ -67,7 +67,7 @@ def compute_shadow_union_at_time(building_gdf, date_time, height_column='default
 #######################################
 # 函数2：批量计算所有时刻的阴影
 #######################################
-def precompute_shadow_unions(building_gdf, start_dt, end_dt, interval_minutes=10, height_column='default_height'):
+def precompute_shadow_unions(building_gdf, start_dt, end_dt, interval_minutes, height_column='default_height'):
     current_time = start_dt
     time_to_union = {}
     while current_time <= end_dt:
@@ -118,7 +118,6 @@ else:
 
 start_dt = datetime(2024, 12, 5, 13, tzinfo=timezone(timedelta(hours=9)))
 end_dt = datetime(2024, 12, 5, 14, tzinfo=timezone(timedelta(hours=9)))
-interval_minutes = 1
 
 #######################################
 # 开始批量计算并存储
@@ -134,13 +133,28 @@ print(f"[INFO] 阴影计算完成，有效时间片数量: {valid_count}")
 # 存储
 #######################################
 # 自动拼接文件名
-date_str= start_dt.strftime("%Y%m%d")
-start_str= start_dt.strftime("%H%M")
-end_str= end_dt.strftime("%H%M")
+# 获取边界框经纬度（单位：度）
+bounds = bldg_merged_gdf.to_crs(epsg=4326).total_bounds  # 转换为WGS84经纬度
+minx, miny, maxx, maxy = bounds  # 左下角 (minx, miny)，右上角 (maxx, maxy)
 
-output_file = f"shadows_{date_str}_{start_str}_{end_str}_{interval_minutes}min.pkl"
+# 保留 4 位小数
+minx_str = f"{minx:.4f}"
+miny_str = f"{miny:.4f}"
+maxx_str = f"{maxx:.4f}"
+maxy_str = f"{maxy:.4f}"
 
+# 拼接文件名
+date_str = start_dt.strftime("%Y%m%d")
+start_str = start_dt.strftime("%H%M")
+end_str = end_dt.strftime("%H%M")
+output_file = (
+    f"shadows_{date_str}_{start_str}_{end_str}_{interval_minutes}min_"
+    f"LL_{minx_str}_{miny_str}_UR_{maxx_str}_{maxy_str}.pkl"
+)
+
+# 保存文件
 with open(output_file, 'wb') as f:
     pickle.dump(time_to_union, f)
 
 print(f"[SUCCESS] 阴影缓存已保存至 {output_file}")
+
