@@ -242,8 +242,8 @@ origin_point_wgs84 = None
 destination_point_wgs84 = None
 origin_marker = None
 destination_marker = None
-
-manual_input_mode = True
+#
+manual_input_mode = False
 manual_origin_point_wgs84 = (34.632734242239636, 135.51493454131852)
 manual_destination_point_wgs84 = (34.63049080065106, 135.54547444776205)
 
