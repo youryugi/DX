@@ -8,7 +8,7 @@ from astral.sun import elevation, azimuth
 from datetime import datetime, timedelta, timezone
 import pickle
 
-interval_minutes=10
+interval_minutes=5
 #######################################
 # 函数1：计算单个时间点的合并阴影
 #######################################
@@ -83,15 +83,15 @@ def precompute_shadow_unions(building_gdf, start_dt, end_dt, interval_minutes, h
 #######################################
 
 bldg_gml_files = [
-    r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\bldg\51357451_bldg_6697_op.gml",
-    r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\bldg\51357452_bldg_6697_op.gml",
-    r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\bldg\51357453_bldg_6697_op.gml",
-    r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\bldg\51357461_bldg_6697_op.gml",
-    r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\bldg\51357462_bldg_6697_op.gml",
-    r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\bldg\51357463_bldg_6697_op.gml",
-    r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\bldg\51357471_bldg_6697_op.gml",
-    r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\bldg\51357472_bldg_6697_op.gml",
-    r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\bldg\51357473_bldg_6697_op.gml"
+    r"bldg\51357451_bldg_6697_op.gml",
+    r"bldg\51357452_bldg_6697_op.gml",
+    r"bldg\51357453_bldg_6697_op.gml",
+    r"bldg\51357461_bldg_6697_op.gml",
+    r"bldg\51357462_bldg_6697_op.gml",
+    r"bldg\51357463_bldg_6697_op.gml",
+    r"bldg\51357471_bldg_6697_op.gml",
+    r"bldg\51357472_bldg_6697_op.gml",
+    r"bldg\51357473_bldg_6697_op.gml"
 
 ]
 
