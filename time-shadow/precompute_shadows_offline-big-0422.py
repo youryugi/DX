@@ -9,6 +9,9 @@ from datetime import datetime, timedelta, timezone
 import pickle
 
 interval_minutes=5
+start_dt = datetime(2024, 12, 5, 9, tzinfo=timezone(timedelta(hours=9)))
+end_dt = datetime(2024, 12, 5, 10, tzinfo=timezone(timedelta(hours=9)))
+
 #######################################
 # 函数1：计算单个时间点的合并阴影
 #######################################
@@ -116,8 +119,6 @@ else:
 # 设置时间段
 #######################################
 
-start_dt = datetime(2024, 12, 5, 13, tzinfo=timezone(timedelta(hours=9)))
-end_dt = datetime(2024, 12, 5, 14, tzinfo=timezone(timedelta(hours=9)))
 
 #######################################
 # 开始批量计算并存储

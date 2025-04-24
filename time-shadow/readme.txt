@@ -1,0 +1,2 @@
+先用precompute shadows offline去计算阴影
+然后read merge bldg合并所有建筑物信息为后面的计算ratio做准备
