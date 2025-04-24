@@ -1,0 +1,9 @@
+geopandas==0.14.4
+matplotlib==3.9.0
+networkx==3.3
+numpy==2.2.4
+osmium==3.7.0
+osmnx==1.9.3
+Shapely==2.0.4
+pandas==2.2.2
+pyproj==3.6.1
