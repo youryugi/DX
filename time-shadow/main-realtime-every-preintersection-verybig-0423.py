@@ -23,8 +23,7 @@ import pickle
 # 1) 读取离线计算好的 (u,v,k, time) -> shadow_ratio
 # 注意：请确认与下面的 G、时间切分一致
 # ---------------------------------------------------------------------------------------
-with open("edge_shadow_ratios_20241205_1300_1400_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl", "rb") as f:
-    precomputed = pickle.load(f)
+
 # 路径设置
 bldg_gml_files = [
     r"bldg\51357451_bldg_6697_op.gml",
@@ -50,8 +49,10 @@ road_gml_files = [
 ]
 # pkl保存路径
 pkl_path = r"bldg_merged_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl"
-
-shadow_file = r"shadows_20241205_1300_1400_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl"
+#先加载边的ratio
+with open("edge_shadow_ratios_20241205_1300_1400_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl", "rb") as f:
+    precomputed = pickle.load(f)
+shadow_file = r"shadows_20241205_0900_1000_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl"
 #设置固定点还是手动
 manual_input_mode = True
 manual_origin_point_wgs84 = (34.632734242239636, 135.51493454131852)

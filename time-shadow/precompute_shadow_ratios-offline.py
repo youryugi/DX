@@ -21,6 +21,9 @@ def precompute_shadow_ratios():
     print("开始加载建筑和阴影数据...")
     # 这里演示读取你给定的建筑大合集 bldg_merged_gdf.pkl
     bldg_pkl = r"bldg_merged_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl"
+    # 加载阴影 {time: geometry} 字典
+    # 例如 5分钟间隔的那个 .pkl
+    shadow_file = r"shadows_20241205_0900_1000_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl"
     with open(bldg_pkl,'rb') as f:
         building_gdf = pickle.load(f)
 
@@ -28,9 +31,7 @@ def precompute_shadow_ratios():
     if building_gdf.crs.to_epsg() != 6669:
         building_gdf = building_gdf.to_crs(epsg=6669)
 
-    # 加载阴影 {time: geometry} 字典
-    # 例如 5分钟间隔的那个 .pkl
-    shadow_file = r"shadows_20241205_1300_1400_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl"
+
     with open(shadow_file, 'rb') as f:
         time_to_union = pickle.load(f)
     # time_to_union: dict[datetime -> MultiPolygon/Polygon/... or None]
