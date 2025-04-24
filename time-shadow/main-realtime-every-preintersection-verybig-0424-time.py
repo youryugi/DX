@@ -320,23 +320,20 @@ start_time = date_time
 # 重点：在多状态 Dijkstra 里使用 precomputed，而不再 intersection()
 # ---------------------------------------------------------------------------------------
 def update_cool_route(coef, start_time, sample_interval=300):
+    import heapq
+    import time
+    from datetime import timedelta
+    import osmnx as ox
+    from shapely.affinity import translate
+
+    # —— 新增计时变量 —— #
+    td_cost_calls = 0              # time_dependent_cost 调用次数
+    td_cost_total_time = 0.0       # time_dependent_cost 累计耗时
+    neighbor_visits = 0            # 邻居遍历次数
+    neighbor_visits_time = 0.0     # 邻居遍历累计耗时
+
     intersection_counter = 0
     intersection_total_time = 0.0
-    """
-    实现更加严谨的“多状态时变 Dijkstra”：
-      - 同一节点可在不同时间到达时，同时保留多条可能路径，
-      - 不再简单丢弃“时间更晚”或“cost更大”的状态，
-      - 只有当一个状态被另一个在时间或cost上严格支配(dominates)时，才会丢弃。
-
-    参数:
-    - coef: 用户Slider指定的阴影系数(-1~1等)
-    - start_time: datetime, 出发时间
-    - sample_interval: 分段采样时，每段的秒数
-    返回:
-    - new_cool_route_gdf: 找到的最优时变路线对应的GeoDataFrame(带1.5m偏移)，若无路则返回None
-    """
-    import heapq
-    from datetime import timedelta
 
     if origin_point_wgs84 is None or destination_point_wgs84 is None:
         return None
@@ -344,61 +341,54 @@ def update_cool_route(coef, start_time, sample_interval=300):
     orig_node = ox.distance.nearest_nodes(G, X=origin_point_wgs84[1], Y=origin_point_wgs84[0])
     dest_node = ox.distance.nearest_nodes(G, X=destination_point_wgs84[1], Y=destination_point_wgs84[0])
 
-    # =============== 2. 定义分段阴影计算函数 ========================
     def time_dependent_cost(u, v, k, arrival_dt):
-        """
-        给定边 (u, v, k) 以及到达此边的时刻 arrival_dt，
-        分段采样计算在该时段穿越此边的 cost + 耗时。
-        返回 (edge_cost, edge_duration)
-        """
+        nonlocal intersection_counter, intersection_total_time
+        nonlocal td_cost_calls, td_cost_total_time
+
+        start_td = time.time()
+        td_cost_calls += 1
+
+        # —— 原有计算逻辑 —— #
         if (u, v, k) not in gdf_edges.index:
-            return float('inf'), float('inf')
+            cost_accumulate = float('inf')
+            edge_duration = float('inf')
+        else:
+            edge_geom = gdf_edges.loc[(u, v, k), 'geometry']
+            edge_length = edge_geom.length
+            speed = 10 * 1000 / 3600  # 10km/h
+            edge_duration = edge_length / speed
 
-        edge_geom = gdf_edges.loc[(u, v, k), 'geometry']
-        edge_length = edge_geom.length
-        speed = 10 * 1000 / 3600  # 10km/h
-        edge_duration = edge_length / speed
+            cost_accumulate = 0.0
+            temp_time = arrival_dt
+            remaining_time = edge_duration
 
-        cost_accumulate = 0.0
-        temp_time = arrival_dt
-        remaining_time = edge_duration
+            while remaining_time > 0:
+                dt = min(sample_interval, remaining_time)
+                mid_time = temp_time + timedelta(seconds=dt / 2)
 
-        while remaining_time > 0:
-            dt = min(sample_interval, remaining_time)
-            mid_time = temp_time + timedelta(seconds=dt / 2)
+                nearest_t = find_nearest_time(time_to_union.keys(), mid_time)
+                if nearest_t:
+                    intersection_counter += 1
+                    t1 = time.time()
+                    ratio = precomputed.get((u, v, k, nearest_t), 0.0)
+                    shadow_len = ratio * edge_length
+                    t2 = time.time()
+                    intersection_total_time += (t2 - t1)
+                else:
+                    shadow_len = 0.0
 
-            # 找最近阴影时刻
-            nearest_t = find_nearest_time(time_to_union.keys(), mid_time)
-            shadow_poly = time_to_union[nearest_t] if nearest_t else None
+                shadow_ratio = shadow_len / edge_length if edge_length > 0 else 0.0
+                sunny_dist = edge_length * (1 - shadow_ratio)
+                cost_part = (sunny_dist + coef * edge_length) * (dt / edge_duration)
+                cost_accumulate += cost_part
 
-            if shadow_poly:
-                nonlocal intersection_counter, intersection_total_time
-                intersection_counter += 1
-                t1 = time.time()
+                temp_time += timedelta(seconds=dt)
+                remaining_time -= dt
 
-                # ==============================
-                # 这里使用预先计算好的 ratio
-                ratio = precomputed.get((u, v, k, nearest_t), 0.0)
-                shadow_len = ratio * edge_length
-                # ==============================
-
-                t2 = time.time()
-                intersection_total_time += (t2 - t1)
-            else:
-                shadow_len = 0.0
-
-            shadow_ratio = shadow_len / edge_length if edge_length > 0 else 0.0
-            sunny_dist = edge_length * (1 - shadow_ratio)
-
-            cost_part = (sunny_dist + coef * edge_length) * (dt / edge_duration)
-            cost_accumulate += cost_part
-
-            temp_time += timedelta(seconds=dt)
-            remaining_time -= dt
-
+        end_td = time.time()
+        td_cost_total_time += (end_td - start_td)
         return cost_accumulate, edge_duration
 
-    # =============== 3. 定义支配判定函数 ==========================
     def is_dominated(new_t, new_cost, states):
         for (t_s, c_s) in states:
             if t_s <= new_t and c_s <= new_cost and (t_s < new_t or c_s < new_cost):
@@ -413,8 +403,9 @@ def update_cool_route(coef, start_time, sample_interval=300):
             non_dominated.append((t_s, c_s))
         return non_dominated
 
-    # =============== 4. 优先队列 + 多状态管理 ======================
-    starttimewantedpath = time.time()
+    # —— 搜索开始计时 —— #
+    t0 = time.time()
+
     pq = []
     best_states = {}
     predecessor = {}
@@ -430,10 +421,7 @@ def update_cool_route(coef, start_time, sample_interval=300):
 
     while pq:
         current_cost, current_node, current_time_s = heapq.heappop(pq)
-
-        if current_node not in best_states:
-            continue
-        if (current_time_s, current_cost) not in best_states[current_node]:
+        if current_node not in best_states or (current_time_s, current_cost) not in best_states[current_node]:
             continue
 
         if current_node == dest_node:
@@ -443,11 +431,11 @@ def update_cool_route(coef, start_time, sample_interval=300):
 
         arrival_dt = start_time + timedelta(seconds=current_time_s)
 
-        if current_node not in G:
-            continue
-
+        # —— 邻居遍历计时开始 —— #
+        t1 = time.time()
         for neighbor, edges_dict in G[current_node].items():
-            for k, edge_attrs in edges_dict.items():
+            for k in edges_dict:
+                neighbor_visits += 1
                 edge_cost, edge_dur = time_dependent_cost(current_node, neighbor, k, arrival_dt)
                 if edge_cost == float('inf'):
                     continue
@@ -464,57 +452,48 @@ def update_cool_route(coef, start_time, sample_interval=300):
                         updated_list = remove_dominated(new_time_s, new_cost, best_states[neighbor])
                         updated_list.append((new_time_s, new_cost))
                         best_states[neighbor] = updated_list
-
                         predecessor[(neighbor, new_time_s, new_cost)] = (current_node, current_time_s, current_cost)
                         heapq.heappush(pq, (new_cost, neighbor, new_time_s))
+        t2 = time.time()
+        neighbor_visits_time += (t2 - t1)
 
-    endtimewantedpath = time.time()
-    timewantedpath = endtimewantedpath - starttimewantedpath
-    print("计算想要的路径的时间(严谨版时变) =", timewantedpath, "秒")
+    t_search_end = time.time()
+    search_time = t_search_end - t0
 
     if not found_path or not dest_best_state:
         print("未找到可行的时变路线。")
         return None
 
+    # 回溯节点
     final_node, final_time_s, final_cost = dest_best_state
     route_nodes = []
     cur_state = (final_node, final_time_s, final_cost)
-    while cur_state is not None:
+    while cur_state:
         n, t_s, c = cur_state
         route_nodes.append(n)
-        cur_state = predecessor.get(cur_state, None)
+        cur_state = predecessor.get(cur_state)
     route_nodes.reverse()
 
-    # =============== 6. 将节点序列转为边序列，提取geometry，偏移 =================
+    # 转为边并偏移
     new_cool_route_edges = []
     for i in range(len(route_nodes) - 1):
-        u = route_nodes[i]
-        v = route_nodes[i + 1]
-
-        found_k = None
-        if (u, v, 0) in gdf_edges.index:
-            found_k = 0
-        else:
-            if v in G[u]:
-                for possible_k in G[u][v].keys():
-                    if (u, v, possible_k) in gdf_edges.index:
-                        found_k = possible_k
-                        break
+        u, v = route_nodes[i], route_nodes[i + 1]
+        found_k = 0 if (u, v, 0) in gdf_edges.index else next(
+            (kk for kk in G[u][v] if (u, v, kk) in gdf_edges.index), None
+        )
         if found_k is not None:
             new_cool_route_edges.append((u, v, found_k))
 
-    if not new_cool_route_edges:
-        print("回溯时没找到对应的边数据，无法绘制。")
-        return None
-
     new_cool_route_gdf = gdf_edges.loc[new_cool_route_edges].copy()
-    from shapely.affinity import translate
-    new_cool_route_gdf['geometry'] = new_cool_route_gdf.geometry.apply(lambda g: translate(g, xoff=1.5, yoff=1.5))
+    new_cool_route_gdf['geometry'] = new_cool_route_gdf.geometry.apply(
+        lambda g: translate(g, xoff=1.5, yoff=1.5)
+    )
 
-    print(f"最终时变路线: 节点数={len(route_nodes)}, cost={final_cost:.3f}, "
-          f"到达时间=+{final_time_s:.1f}秒(相对于出发时刻)")
-    print(f"本次路径计算共执行了 {intersection_counter} 次 intersection() 操作")
-    print(f"所有 intersection() 总耗时: {intersection_total_time:.4f} 秒")
+    # —— 打印所有计时统计 —— #
+    print(f"路径搜索总耗时：{search_time:.4f} 秒")
+    print(f"time_dependent_cost 调用次数：{td_cost_calls} 次，累计耗时：{td_cost_total_time:.4f} 秒")
+    print(f"intersection() 调用次数：{intersection_counter} 次，累计耗时：{intersection_total_time:.4f} 秒")
+    print(f"邻居遍历次数：{neighbor_visits} 次，累计耗时：{neighbor_visits_time:.4f} 秒")
 
     return new_cool_route_gdf
 

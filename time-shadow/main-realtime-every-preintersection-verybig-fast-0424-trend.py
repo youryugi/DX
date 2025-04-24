@@ -47,11 +47,14 @@ road_gml_files = [
     r"tran\51357472_tran_6697_op.gml",
     r"tran\51357473_tran_6697_op.gml"
 ]
+
 # pkl保存路径
 pkl_path = r"bldg_merged_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl"
 #先加载边的ratio
 with open("edge_shadow_ratios_20241205_0900_1000_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl", "rb") as f:
     precomputed = pickle.load(f)
+with open("edge_trend_map_20241205_0900_1000_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl", "rb") as f:
+    edge_trend_map = pickle.load(f)
 shadow_file = r"shadows_20241205_0900_1000_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl"
 #设置固定点还是手动
 manual_input_mode = True
@@ -346,13 +349,19 @@ def update_cool_route(coef, start_time, sample_interval=300):
 
     # =============== 2. 定义分段阴影计算函数 ========================
     def time_dependent_cost(u, v, k, arrival_dt):
-        """
-        给定边 (u, v, k) 以及到达此边的时刻 arrival_dt，
-        分段采样计算在该时段穿越此边的 cost + 耗时。
-        返回 (edge_cost, edge_duration)
-        """
         if (u, v, k) not in gdf_edges.index:
             return float('inf'), float('inf')
+
+        # ========== 【新增】太阳趋势剪枝 ==========
+        minute_now = arrival_dt.hour * 60 + arrival_dt.minute
+        trend_list = edge_trend_map.get((u, v, k), [])
+        for seg in trend_list:
+            if seg["start"] <= minute_now < seg["end"]:
+                if (coef > 0 and seg["type"] == "decreasing") or \
+                        (coef < 0 and seg["type"] == "increasing"):
+                    return float('inf'), float('inf')  # 直接硬剪
+                break  # 找到了对应段就退出
+        # ==========================================
 
         edge_geom = gdf_edges.loc[(u, v, k), 'geometry']
         edge_length = edge_geom.length
@@ -367,7 +376,6 @@ def update_cool_route(coef, start_time, sample_interval=300):
             dt = min(sample_interval, remaining_time)
             mid_time = temp_time + timedelta(seconds=dt / 2)
 
-            # 找最近阴影时刻
             nearest_t = find_nearest_time(time_to_union.keys(), mid_time)
             shadow_poly = time_to_union[nearest_t] if nearest_t else None
 
@@ -375,13 +383,8 @@ def update_cool_route(coef, start_time, sample_interval=300):
                 nonlocal intersection_counter, intersection_total_time
                 intersection_counter += 1
                 t1 = time.time()
-
-                # ==============================
-                # 这里使用预先计算好的 ratio
                 ratio = precomputed.get((u, v, k, nearest_t), 0.0)
                 shadow_len = ratio * edge_length
-                # ==============================
-
                 t2 = time.time()
                 intersection_total_time += (t2 - t1)
             else:
@@ -397,7 +400,6 @@ def update_cool_route(coef, start_time, sample_interval=300):
             remaining_time -= dt
 
         return cost_accumulate, edge_duration
-
     # =============== 3. 定义支配判定函数 ==========================
     def is_dominated(new_t, new_cost, states):
         for (t_s, c_s) in states:
