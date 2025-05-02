@@ -325,28 +325,22 @@ start_time = date_time
 def update_cool_route(coef, start_time, sample_interval=300):
     intersection_counter = 0
     intersection_total_time = 0.0
-    """
-    实现更加严谨的“多状态时变 Dijkstra”：
-      - 同一节点可在不同时间到达时，同时保留多条可能路径，
-      - 不再简单丢弃“时间更晚”或“cost更大”的状态，
-      - 只有当一个状态被另一个在时间或cost上严格支配(dominates)时，才会丢弃。
 
-    参数:
-    - coef: 用户Slider指定的阴影系数(-1~1等)
-    - start_time: datetime, 出发时间
-    - sample_interval: 分段采样时，每段的秒数
-    返回:
-    - new_cool_route_gdf: 找到的最优时变路线对应的GeoDataFrame(带1.5m偏移)，若无路则返回None
-    """
     import heapq
     from datetime import timedelta
-    # 预处理：构建 (u,v,k) → pd.IntervalIndex → type
+    import time
+    from shapely.affinity import translate
+
+    # —— 各部分计时 —— #
+    t_build_trend = time.time()
     trend_interval_map = {}
     for key, segs in edge_trend_map.items():
         starts = [s["start"] for s in segs]
         ends = [s["end"] for s in segs]
         types = [s["type"] for s in segs]
         trend_interval_map[key] = pd.IntervalIndex.from_arrays(starts, ends), types
+    t_build_trend_done = time.time()
+    print(f"[计时] trend map 构建耗时: {t_build_trend_done - t_build_trend:.4f} 秒")
 
     if origin_point_wgs84 is None or destination_point_wgs84 is None:
         return None
@@ -354,12 +348,13 @@ def update_cool_route(coef, start_time, sample_interval=300):
     orig_node = ox.distance.nearest_nodes(G, X=origin_point_wgs84[1], Y=origin_point_wgs84[0])
     dest_node = ox.distance.nearest_nodes(G, X=destination_point_wgs84[1], Y=destination_point_wgs84[0])
 
-    # =============== 2. 定义分段阴影计算函数 ========================
     def time_dependent_cost(u, v, k, arrival_dt):
+        nonlocal intersection_counter, intersection_total_time
+        t_td_start = time.time()
+
         if (u, v, k) not in gdf_edges.index:
             return float('inf'), float('inf')
 
-        # ========== 【新增】太阳趋势剪枝 ==========
         minute_now = arrival_dt.hour * 60 + arrival_dt.minute
         interval_index, types = trend_interval_map.get((u, v, k), (None, None))
         trend_type = None
@@ -368,11 +363,9 @@ def update_cool_route(coef, start_time, sample_interval=300):
             if idx != -1:
                 trend_type = types[idx]
 
-        # ==========================================
-
         edge_geom = gdf_edges.loc[(u, v, k), 'geometry']
         edge_length = edge_geom.length
-        speed = 10 * 1000 / 3600  # 10km/h
+        speed = 10 * 1000 / 3600
         edge_duration = edge_length / speed
 
         cost_accumulate = 0.0
@@ -387,7 +380,6 @@ def update_cool_route(coef, start_time, sample_interval=300):
             shadow_poly = time_to_union[nearest_t] if nearest_t else None
 
             if shadow_poly:
-                nonlocal intersection_counter, intersection_total_time
                 intersection_counter += 1
                 t1 = time.time()
                 ratio = precomputed.get((u, v, k, nearest_t), 0.0)
@@ -399,15 +391,14 @@ def update_cool_route(coef, start_time, sample_interval=300):
 
             shadow_ratio = shadow_len / edge_length if edge_length > 0 else 0.0
             sunny_dist = edge_length * (1 - shadow_ratio)
-
             cost_part = (sunny_dist + coef * edge_length) * (dt / edge_duration)
             cost_accumulate += cost_part
-
             temp_time += timedelta(seconds=dt)
             remaining_time -= dt
 
+        t_td_end = time.time()
         return cost_accumulate, edge_duration
-    # =============== 3. 定义支配判定函数 ==========================
+
     def is_dominated(new_t, new_cost, states):
         for (t_s, c_s) in states:
             if t_s <= new_t and c_s <= new_cost and (t_s < new_t or c_s < new_cost):
@@ -422,7 +413,6 @@ def update_cool_route(coef, start_time, sample_interval=300):
             non_dominated.append((t_s, c_s))
         return non_dominated
 
-    # =============== 4. 优先队列 + 多状态管理 ======================
     starttimewantedpath = time.time()
     pq = []
     best_states = {}
@@ -451,7 +441,6 @@ def update_cool_route(coef, start_time, sample_interval=300):
             break
 
         arrival_dt = start_time + timedelta(seconds=current_time_s)
-
         if current_node not in G:
             continue
 
@@ -473,7 +462,6 @@ def update_cool_route(coef, start_time, sample_interval=300):
                         updated_list = remove_dominated(new_time_s, new_cost, best_states[neighbor])
                         updated_list.append((new_time_s, new_cost))
                         best_states[neighbor] = updated_list
-
                         predecessor[(neighbor, new_time_s, new_cost)] = (current_node, current_time_s, current_cost)
                         heapq.heappush(pq, (new_cost, neighbor, new_time_s))
 
@@ -494,7 +482,6 @@ def update_cool_route(coef, start_time, sample_interval=300):
         cur_state = predecessor.get(cur_state, None)
     route_nodes.reverse()
 
-    # =============== 6. 将节点序列转为边序列，提取geometry，偏移 =================
     new_cool_route_edges = []
     for i in range(len(route_nodes) - 1):
         u = route_nodes[i]
@@ -517,7 +504,6 @@ def update_cool_route(coef, start_time, sample_interval=300):
         return None
 
     new_cool_route_gdf = gdf_edges.loc[new_cool_route_edges].copy()
-    from shapely.affinity import translate
     new_cool_route_gdf['geometry'] = new_cool_route_gdf.geometry.apply(lambda g: translate(g, xoff=1.5, yoff=1.5))
 
     print(f"最终时变路线: 节点数={len(route_nodes)}, cost={final_cost:.3f}, "
@@ -526,6 +512,7 @@ def update_cool_route(coef, start_time, sample_interval=300):
     print(f"所有 intersection() 总耗时: {intersection_total_time:.4f} 秒")
 
     return new_cool_route_gdf
+
 
 # ---------------------------------------------------------------------------------------
 # 设置 Slider 与按钮
