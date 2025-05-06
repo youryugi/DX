@@ -379,15 +379,42 @@ def update_cool_route(coef, start_time, sample_interval=300):
 
     def heuristic(node, cur_time_s):
         nonlocal t_heuristic_accum, h_calls
-        t0 = time.time(); h_calls += 1
+        t0 = time.time();
+        h_calls += 1
+
         lat, lon = G.nodes[node]['y'], G.nodes[node]['x']
         dist = ox.distance.euclidean_dist_vec(lat, lon, goal_lat, goal_lon)
-        # 估计抵达该直线距离所需时间 (保守取直线)
+
+        # 预估到达该点的时间（保守估计直线前进）
         est_dt = cur_time_s + dist / speed
         future_dt = start_time + timedelta(seconds=est_dt)
         minute = future_dt.hour * 60 + future_dt.minute
-        ratio = 0.5  # 保守设全阳，可替换为更复杂预测
-        h_val = dist * (1 + coef * ratio)
+        minute %= 1440
+
+        # 计算 trend-aware 的预估最小 ratio（尝试乐观下界）
+        # 找 node 的所有出边
+        out_edges = [(node, nbr, k) for nbr in G[node] for k in G[node][nbr]]
+        ratios = []
+        for u, v, k in out_edges:
+            iv, types = trend_interval_map.get((u, v, k), (None, None))
+            if iv is None:
+                continue
+            idx = iv.get_indexer([minute])[0]
+            ttype = types[idx] if idx >= 0 else "stable"
+            raw_ratio = precomputed.get((u, v, k, minute), 0.0)
+            # 根据趋势进行保守估计
+            if ttype == "decreasing":
+                est_ratio = max(raw_ratio - 0.2, 0.0)
+            elif ttype == "increasing":
+                est_ratio = min(raw_ratio + 0.2, 1.0)
+            else:
+                est_ratio = raw_ratio
+            ratios.append(est_ratio)
+
+        # 取所有出边中最小的 ratio，表示“乐观预期”
+        r_min = min(ratios) if ratios else 1.0
+
+        h_val = dist * (1 + coef * r_min)
         t_heuristic_accum += (time.time() - t0)
         return h_val
 

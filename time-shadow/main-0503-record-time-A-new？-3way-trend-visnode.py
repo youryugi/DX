@@ -348,25 +348,36 @@ print(f"trend_interval_map 构建总耗时记录: {(time.time()-auto_tmap_start)
 # ----------------------------------------------------------------------------
 # 2. A* 搜索：多状态 + 时变代价 + 全流程计时
 # ----------------------------------------------------------------------------
+explored_markers = []
 
 def update_cool_route(coef, start_time, sample_interval=300):
-    """返回 GeoDataFrame: 最优阴影‑感知路径  + 控制台打印完整计时统计"""
+    """返回 GeoDataFrame: 最优阴影‑感知路径  + 控制台打印完整计时统计
+       并用绿色小点可视化 A★ 展开过的节点
+    """
+
+    # ★★★ 可视化 ‑ 先清除旧的绿点 ★★★
+    global explored_markers
+    for h in explored_markers:
+        h.remove()
+    explored_markers = []
 
     # --- 起终点 ---
-    origin_node = ox.distance.nearest_nodes(G, X=manual_origin_point_wgs84[1],      Y=manual_origin_point_wgs84[0])
-    goal_node   = ox.distance.nearest_nodes(G, X=manual_destination_point_wgs84[1], Y=manual_destination_point_wgs84[0])
+    origin_node = ox.distance.nearest_nodes(
+        G, X=manual_origin_point_wgs84[1],      Y=manual_origin_point_wgs84[0])
+    goal_node   = ox.distance.nearest_nodes(
+        G, X=manual_destination_point_wgs84[1], Y=manual_destination_point_wgs84[0])
 
     # =============== 全局计时器 ===============
     t_global_start       = time.time()
-    t_cost_accum         = 0.0   # time‑dependent cost 累计
-    t_heuristic_accum    = 0.0   # heuristic 累计
-    t_neighbor_accum     = 0.0   # 邻居遍历累积
-    td_calls             = 0     # cost 调用计数
-    h_calls              = 0     # heuristic 调用计数
-    neighbor_visits      = 0     # 邻居计数
-
+    t_cost_accum         = 0.0
+    t_heuristic_accum    = 0.0
+    t_neighbor_accum     = 0.0
+    td_calls             = 0
+    h_calls              = 0
+    neighbor_visits      = 0
+    explored_count = 0  # ★ 新增：统计已展开节点数
     # =============== 函数定义 ===============
-    speed = 10 * 1000 / 3600  # m/s
+    speed = 10 * 1000 / 3600
     goal_lat, goal_lon = G.nodes[goal_node]['y'], G.nodes[goal_node]['x']
 
     def predict_sunny_ratio(edge_key, minute):
@@ -380,19 +391,39 @@ def update_cool_route(coef, start_time, sample_interval=300):
     def heuristic(node, cur_time_s):
         nonlocal t_heuristic_accum, h_calls
         t0 = time.time(); h_calls += 1
+
         lat, lon = G.nodes[node]['y'], G.nodes[node]['x']
         dist = ox.distance.euclidean_dist_vec(lat, lon, goal_lat, goal_lon)
-        # 估计抵达该直线距离所需时间 (保守取直线)
+
         est_dt = cur_time_s + dist / speed
         future_dt = start_time + timedelta(seconds=est_dt)
-        minute = future_dt.hour * 60 + future_dt.minute
-        ratio = 0.5  # 保守设全阳，可替换为更复杂预测
-        h_val = dist * (1 + coef * ratio)
+        minute = (future_dt.hour * 60 + future_dt.minute) % 1440
+
+        out_edges = [(node, nbr, k) for nbr in G[node] for k in G[node][nbr]]
+        ratios = []
+        for u, v, k in out_edges:
+            iv, types = trend_interval_map.get((u, v, k), (None, None))
+            if iv is None:
+                continue
+            idx = iv.get_indexer([minute])[0]
+            ttype = types[idx] if idx >= 0 else "stable"
+            raw_ratio = precomputed.get((u, v, k, minute), 0.0)
+            print(raw_ratio)
+            if ttype == "decreasing":
+                est_ratio = max(raw_ratio - 0.2, 0.0)
+            elif ttype == "increasing":
+                est_ratio = min(raw_ratio + 0.2, 1.0)
+            else:
+                est_ratio = raw_ratio
+            ratios.append(est_ratio)
+
+        r_min = min(ratios) if ratios else 1.0
+        #h_val = dist * (1 + coef * r_min)
+        h_val = dist * (1 + coef * (1 - r_min))
         t_heuristic_accum += (time.time() - t0)
         return h_val
 
     def time_dependent_cost(u, v, k, arrival_dt):
-        """按 sample_interval 对边进行积分，返回 (cost, duration)"""
         nonlocal t_cost_accum, td_calls
         t0 = time.time(); td_calls += 1
 
@@ -420,10 +451,22 @@ def update_cool_route(coef, start_time, sample_interval=300):
     open_q = []
     heapq.heappush(open_q, (heuristic(origin_node, 0.0), origin_node, 0.0))
     g_best = {origin_node: 0.0}
-    pred   = {}              # (node,time) -> (prev_node, prev_time)
+    pred   = {}
+
+    first_label = True                                # 给图例用
 
     while open_q:
         f_val, cur, cur_t = heapq.heappop(open_q)
+
+        # ★★★ 画绿色点标记已展开节点 ★★★
+        explored_count += 1
+        lat, lon = G.nodes[cur]['y'], G.nodes[cur]['x']
+        x, y = transformer_from_wgs84.transform(lon, lat)
+        marker = ax.plot(x, y, '.', color='green', markersize=4,
+                         label='Explored Node' if first_label else '')[0]
+        explored_markers.append(marker)
+        first_label = False
+
         if cur == goal_node:
             break
         arr_dt = start_time + timedelta(seconds=cur_t)
@@ -439,7 +482,8 @@ def update_cool_route(coef, start_time, sample_interval=300):
                 if nb not in g_best or new_g < g_best[nb] - 1e-6:
                     g_best[nb] = new_g
                     pred[(nb, new_t)] = (cur, cur_t)
-                    heapq.heappush(open_q, (new_g + heuristic(nb, new_t), nb, new_t))
+                    heapq.heappush(open_q,
+                                   (new_g + heuristic(nb, new_t), nb, new_t))
                     neighbor_visits += 1
         t_neighbor_accum += (time.time() - t_nb0)
 
@@ -447,30 +491,33 @@ def update_cool_route(coef, start_time, sample_interval=300):
         print("[A*] 未找到可行路径\n"); return None
 
     # =============== 回溯最晚时间戳状态 ===============
-    goal_states = [(t, key) for key,t in [(k[0],k[1]) for k in pred if k[0]==goal_node]]
-    best_t = max([t for t,_ in goal_states])
-    nodes = [goal_node]; cur = (goal_node, best_t)
-    while cur in pred:
-        prev = pred[cur]; nodes.append(prev[0]); cur = prev
+    goal_states = [(t, key) for key, t in [(k[0], k[1]) for k in pred if k[0] == goal_node]]
+    best_t = max([t for t, _ in goal_states])
+    nodes = [goal_node]; cur_key = (goal_node, best_t)
+    while cur_key in pred:
+        prev = pred[cur_key]; nodes.append(prev[0]); cur_key = prev
     nodes.reverse()
 
     # =============== 组装 GeoDataFrame ===============
-    edges=[]
-    for i in range(len(nodes)-1):
-        u,v = nodes[i], nodes[i+1]
-        k = 0 if (u,v,0) in gdf_edges.index else next((kk for kk in G[u][v] if (u,v,kk) in gdf_edges.index),0)
-        edges.append((u,v,k))
+    edges = []
+    for i in range(len(nodes) - 1):
+        u, v = nodes[i], nodes[i + 1]
+        k = 0 if (u, v, 0) in gdf_edges.index else next(
+            (kk for kk in G[u][v] if (u, v, kk) in gdf_edges.index), 0)
+        edges.append((u, v, k))
     route = gdf_edges.loc[edges].copy()
 
     # =============== 打印计时报告 ===============
     print("\n======= A★ Path‑finding Timing Report =======")
-    print(f"Total elapsed              : {time.time()-t_global_start:.4f} s")
+    print(f"Total elapsed              : {time.time() - t_global_start:.4f} s")
     print(f"Heuristic calls / time     : {h_calls} / {t_heuristic_accum:.4f} s")
     print(f"Cost calls      / time     : {td_calls} / {t_cost_accum:.4f} s")
     print(f"Neighbor visits  / time    : {neighbor_visits} / {t_neighbor_accum:.4f} s")
+    print(f"Nodes actually expanded    : {explored_count}")
     print("=============================================\n")
 
     return route
+
 
 def update_static_route(coef, start_time):
     """

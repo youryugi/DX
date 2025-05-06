@@ -47,6 +47,9 @@ road_gml_files = [
     r"tran\51357472_tran_6697_op.gml",
     r"tran\51357473_tran_6697_op.gml"
 ]
+with open("flat_trend_lookup.pkl", "rb")  as f: flat_trend_lookup  = pickle.load(f)
+with open("node_minute_weight.pkl", "rb") as f: node_weight_lookup = pickle.load(f)
+
 # pkl保存路径
 pkl_path = r"bldg_merged_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl"
 #先加载边的ratio
@@ -350,88 +353,110 @@ print(f"trend_interval_map 构建总耗时记录: {(time.time()-auto_tmap_start)
 # ----------------------------------------------------------------------------
 
 def update_cool_route(coef, start_time, sample_interval=300):
-    """返回 GeoDataFrame: 最优阴影‑感知路径  + 控制台打印完整计时统计"""
+    """Trend‑aware A★：启发函数/代价均用 O(1) 查表，含完整计时打印"""
 
-    # --- 起终点 ---
-    origin_node = ox.distance.nearest_nodes(G, X=manual_origin_point_wgs84[1],      Y=manual_origin_point_wgs84[0])
-    goal_node   = ox.distance.nearest_nodes(G, X=manual_destination_point_wgs84[1], Y=manual_destination_point_wgs84[0])
+    # ───────── 起终节点 ─────────
+    origin_node = ox.distance.nearest_nodes(
+        G, X=manual_origin_point_wgs84[1], Y=manual_origin_point_wgs84[0])
+    goal_node   = ox.distance.nearest_nodes(
+        G, X=manual_destination_point_wgs84[1], Y=manual_destination_point_wgs84[0])
 
-    # =============== 全局计时器 ===============
-    t_global_start       = time.time()
-    t_cost_accum         = 0.0   # time‑dependent cost 累计
-    t_heuristic_accum    = 0.0   # heuristic 累计
-    t_neighbor_accum     = 0.0   # 邻居遍历累积
-    td_calls             = 0     # cost 调用计数
-    h_calls              = 0     # heuristic 调用计数
-    neighbor_visits      = 0     # 邻居计数
+    # ───────── 计时器 ─────────
+    t0_global = time.time()
+    t_cost_acc = t_h_acc = t_nb_acc = 0.0
+    td_calls = h_calls = nb_visits = 0
 
-    # =============== 函数定义 ===============
-    speed = 10 * 1000 / 3600  # m/s
+    # ───────── 常量 / 缓存 ──────
+    SPEED = 10_000 / 3600      # 10 km·h⁻¹
     goal_lat, goal_lon = G.nodes[goal_node]['y'], G.nodes[goal_node]['x']
+    h_cache = {}               # (node, minute) -> h
 
-    def predict_sunny_ratio(edge_key, minute):
-        iv, types = trend_interval_map.get(edge_key, (None, None))
-        if iv is None:
-            return 1.0
-        idx = iv.get_indexer([minute])[0]
-        ttype = types[idx] if idx != -1 else 'stable'
-        return {'increasing': 1.0, 'stable': 0.7, 'decreasing': 0.4}.get(ttype, 1.0)
+    # ───────────────── heuristic ─────────────────
+    def heuristic(node, cur_t_s):
+        """
+        trend‑aware heuristic 2.0
+        —— 用“当前节点所有出边中最阴(权重最小)的一条” 来修正估值
+        admissible：不会高估真实成本
+        """
+        nonlocal t_h_acc, h_calls
+        tic = time.time();
+        h_calls += 1
 
-    def heuristic(node, cur_time_s):
-        nonlocal t_heuristic_accum, h_calls
-        t0 = time.time(); h_calls += 1
+        # ① 欧氏距离（直线下界）
         lat, lon = G.nodes[node]['y'], G.nodes[node]['x']
         dist = ox.distance.euclidean_dist_vec(lat, lon, goal_lat, goal_lon)
-        # 估计抵达该直线距离所需时间 (保守取直线)
-        est_dt = cur_time_s + dist / speed
-        future_dt = start_time + timedelta(seconds=est_dt)
-        minute = future_dt.hour * 60 + future_dt.minute
-        ratio = 0.5  # 保守设全阳，可替换为更复杂预测
-        h_val = dist * (1 + coef * ratio)
-        t_heuristic_accum += (time.time() - t0)
+
+        # ② 预计到达终点的分钟 key
+        est_arrival_ts = start_time.timestamp() + cur_t_s + dist / SPEED
+        minute = int(est_arrival_ts // 60) % 1440
+        cache_key = (node, minute)
+
+        if cache_key in h_cache:  # 缓存
+            h_val = h_cache[cache_key]
+        else:
+            # ③ 取“最阴出边”权重
+            out_edges = [(node, nbr, k) for nbr in G[node] for k in G[node][nbr]]
+            if out_edges:
+                w_est = min(
+                    flat_trend_lookup.get((u, v, k, minute), 1.0)
+                    for (u, v, k) in out_edges
+                )
+            else:
+                w_est = 1.0  # 孤立节点
+
+            # ④ 启发值：距离 × (1+coef) × 最阴权重
+            h_val = dist * (1 + coef) * w_est
+            h_cache[cache_key] = h_val
+
+        t_h_acc += time.time() - tic
         return h_val
 
-    def time_dependent_cost(u, v, k, arrival_dt):
-        """按 sample_interval 对边进行积分，返回 (cost, duration)"""
-        nonlocal t_cost_accum, td_calls
-        t0 = time.time(); td_calls += 1
+    # ───────────────── td_cost ───────────────────
+    def td_cost(u, v, k, arrival_dt):
+        """按 sample_interval≈5 min 积分，O(1) 查 trend + 阴影"""
+        nonlocal t_cost_acc, td_calls
+        tic = time.time(); td_calls += 1
 
         if (u, v, k) not in gdf_edges.index:
             return math.inf, math.inf
-        geom = gdf_edges.loc[(u, v, k), 'geometry']
-        length = geom.length
-        duration = length / speed
+        length   = gdf_edges.loc[(u, v, k), 'geometry'].length
+        duration = length / SPEED
+
         cost_acc = 0.0
-        tmp_dt   = arrival_dt
-        remain   = duration
+        remain, tmp_dt = duration, arrival_dt
         while remain > 0:
             dt = min(sample_interval, remain)
-            mid = tmp_dt + timedelta(seconds=dt/2)
-            nt  = find_nearest_time(time_to_union.keys(), mid)
-            ratio = precomputed.get((u, v, k, nt), 0.0) if nt else 0.0
+            mid_dt = tmp_dt + timedelta(seconds=dt/2)
+            minute = (mid_dt.hour * 60 + mid_dt.minute) % 1440
+
+            ratio  = precomputed.get((u, v, k, minute), 0.0)          # 阴影比
+            w_trnd = flat_trend_lookup.get((u, v, k, minute), 1.0)    # 趋势权重
+
             sunny_len = length * (1 - ratio)
-            cost_acc += (sunny_len + coef * length) * (dt / duration)
-            tmp_dt  += timedelta(seconds=dt)
-            remain  -= dt
-        t_cost_accum += (time.time() - t0)
+            cost_acc += (sunny_len * w_trnd + coef * length) * (dt / duration)
+
+            tmp_dt += timedelta(seconds=dt)
+            remain -= dt
+
+        t_cost_acc += time.time() - tic
         return cost_acc, duration
 
-    # =============== A* 主循环 ===============
-    open_q = []
-    heapq.heappush(open_q, (heuristic(origin_node, 0.0), origin_node, 0.0))
+    # ───────────────── A★ 主循环 ───────────────
+    open_q = [(heuristic(origin_node, 0.0), origin_node, 0.0)]
     g_best = {origin_node: 0.0}
-    pred   = {}              # (node,time) -> (prev_node, prev_time)
+    pred   = {}                                  # (node, t) -> (prev, prev_t)
 
     while open_q:
         f_val, cur, cur_t = heapq.heappop(open_q)
         if cur == goal_node:
+            best_t = cur_t
             break
-        arr_dt = start_time + timedelta(seconds=cur_t)
 
-        t_nb0 = time.time()
+        arr_dt = start_time + timedelta(seconds=cur_t)
+        tic_nb = time.time()
         for nb, edict in G[cur].items():
             for k in edict:
-                inc_cost, dur = time_dependent_cost(cur, nb, k, arr_dt)
+                inc_cost, dur = td_cost(cur, nb, k, arr_dt)
                 if math.isinf(inc_cost):
                     continue
                 new_t = cur_t + dur
@@ -439,35 +464,33 @@ def update_cool_route(coef, start_time, sample_interval=300):
                 if nb not in g_best or new_g < g_best[nb] - 1e-6:
                     g_best[nb] = new_g
                     pred[(nb, new_t)] = (cur, cur_t)
-                    heapq.heappush(open_q, (new_g + heuristic(nb, new_t), nb, new_t))
-                    neighbor_visits += 1
-        t_neighbor_accum += (time.time() - t_nb0)
+                    heapq.heappush(open_q,
+                        (new_g + heuristic(nb, new_t), nb, new_t))
+                    nb_visits += 1
+        t_nb_acc += time.time() - tic_nb
+    else:
+        print("[A★] 未找到可行路径"); return None
 
-    if goal_node not in g_best:
-        print("[A*] 未找到可行路径\n"); return None
-
-    # =============== 回溯最晚时间戳状态 ===============
-    goal_states = [(t, key) for key,t in [(k[0],k[1]) for k in pred if k[0]==goal_node]]
-    best_t = max([t for t,_ in goal_states])
+    # ───────── 回溯路径 ───────────────────────
     nodes = [goal_node]; cur = (goal_node, best_t)
     while cur in pred:
         prev = pred[cur]; nodes.append(prev[0]); cur = prev
     nodes.reverse()
 
-    # =============== 组装 GeoDataFrame ===============
-    edges=[]
+    edge_keys = []
     for i in range(len(nodes)-1):
-        u,v = nodes[i], nodes[i+1]
-        k = 0 if (u,v,0) in gdf_edges.index else next((kk for kk in G[u][v] if (u,v,kk) in gdf_edges.index),0)
-        edges.append((u,v,k))
-    route = gdf_edges.loc[edges].copy()
+        u, v = nodes[i], nodes[i+1]
+        k = 0 if (u,v,0) in gdf_edges.index else next(
+                (kk for kk in G[u][v] if (u,v,kk) in gdf_edges.index), 0)
+        edge_keys.append((u,v,k))
+    route = gdf_edges.loc[edge_keys].copy()
 
-    # =============== 打印计时报告 ===============
+    # ───────── 计时报告 ───────────────────────
     print("\n======= A★ Path‑finding Timing Report =======")
-    print(f"Total elapsed              : {time.time()-t_global_start:.4f} s")
-    print(f"Heuristic calls / time     : {h_calls} / {t_heuristic_accum:.4f} s")
-    print(f"Cost calls      / time     : {td_calls} / {t_cost_accum:.4f} s")
-    print(f"Neighbor visits  / time    : {neighbor_visits} / {t_neighbor_accum:.4f} s")
+    print(f"Total elapsed              : {time.time()-t0_global:.4f} s")
+    print(f"Heuristic calls / time     : {h_calls} / {t_h_acc:.4f} s")
+    print(f"Cost calls      / time     : {td_calls} / {t_cost_acc:.4f} s")
+    print(f"Neighbor visits  / time    : {nb_visits} / {t_nb_acc:.4f} s")
     print("=============================================\n")
 
     return route

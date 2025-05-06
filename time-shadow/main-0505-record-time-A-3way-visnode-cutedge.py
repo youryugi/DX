@@ -112,6 +112,8 @@ if building_gdf.crs.to_epsg() != 6669:
 if road_gdf.crs.to_epsg() != 6669:
     road_gdf = road_gdf.to_crs(epsg=6669)
 
+
+
 # ---------------------------------------------------------------------------------------
 # calculate_shadow_stats (若只做演示，可留着；否则可改为也使用 precomputed)
 # ---------------------------------------------------------------------------------------
@@ -253,6 +255,100 @@ if gdf_edges.crs.to_epsg() != 4326:
     gdf_edges = gdf_edges.to_crs(epsg=4326)
 gdf_edges = gdf_edges.to_crs(epsg=6669)
 
+
+# ---------------------------------------------------------------------------------------
+# 可视化 09:00–10:00 阴影趋势（蓝=阴影变多，红=阴影变少，橘=非单调）
+# ---------------------------------------------------------------------------------------
+from collections import defaultdict
+import matplotlib.pyplot as plt
+import numpy as np
+
+# ---------- 1. 先把 (u,v,k,time) -> ratio 组织成 {edge: [ratio_t0, ratio_t1, ...]} ----------
+edge2series = defaultdict(list)
+t_start = datetime(2024, 12, 5, 9,  0, tzinfo=timezone(timedelta(hours=9)))
+t_end   = datetime(2024, 12, 5, 10, 0, tzinfo=timezone(timedelta(hours=9)))
+cur_t   = t_start
+while cur_t < t_end:
+    # 精确到最近 1 min（与预计算键保持一致）
+    nearest = find_nearest_time(time_to_union.keys(), cur_t)
+    for (u, v, k, tkey), ratio in precomputed.items():
+        if tkey == nearest:
+            edge2series[(u, v, k)].append(ratio)
+    cur_t += timedelta(minutes=1)
+
+# ---------- 2. 判定趋势 ----------
+def classify(series, eps=1e-6):
+    """返回 'increasing' / 'decreasing' / 'other'（含恒定或起伏）"""
+    diff = np.diff(series)
+    if np.all(diff >  eps):
+        return 'increasing'   # 阴影变少
+    if np.all(diff < -eps):
+        return 'decreasing'   # 阴影变多
+    return 'other'
+
+edge_classes = {}
+for edge, seq in edge2series.items():
+    if len(seq) > 1:          # 至少 2 个时间点才谈趋势
+        edge_classes[edge] = classify(seq)
+    else:                      # 只有 1 个观测值 → 视为 other
+        edge_classes[edge] = 'other'
+
+
+# ---------- NEW: 计算平均边长并剪枝 ---------- #
+# ① 平均长度
+avg_len = gdf_edges.length.mean()
+
+# ② 找出同时满足 a) trend 为 'increasing'（红色），b) 长度大于平均 的边
+edges_to_prune = [
+    edge for edge, trend in edge_classes.items()
+    if trend == 'increasing' and gdf_edges.loc[edge].geometry.length > avg_len
+]
+
+print(f"Pruning {len(edges_to_prune)} long‑red edges …")
+
+# ③ 从 GeoDataFrame 删
+gdf_edges = gdf_edges.drop(edges_to_prune)
+
+# ④ 从 NetworkX 图删
+G_pruned = G.copy()
+for u, v, k in edges_to_prune:
+    if G_pruned.has_edge(u, v, key=k):
+        G_pruned.remove_edge(u, v, key=k)
+# 让后面的代码继续沿用剪完枝的版本
+G = G_pruned
+# ---------------------------------------------- #
+
+print(f"剪枝后节点数量: {len(G.nodes)}")
+print(f"剪枝后边数量: {len(G.edges)}")
+
+# ---------- 3. 建立颜色列并绘图 ----------
+color_map = {'increasing': 'red', 'decreasing': 'blue', 'other': 'orange'}
+gdf_trend = gdf_edges.copy()
+gdf_trend['trend']  = gdf_trend.index.map(edge_classes.get)
+gdf_trend['color']  = gdf_trend['trend'].map(color_map)
+
+# 只画有统计结果的边；其余可忽略或统一设灰色
+mask_has_trend = gdf_trend['trend'].notna()
+gdf_trend[mask_has_trend].plot(
+    ax=ax,
+    color=gdf_trend.loc[mask_has_trend, 'color'],
+    linewidth=1.8,
+    label='Shadow trend 09‑10'
+)
+
+# # ---------- 4. 补充图例 ----------
+# from matplotlib.lines import Line2D
+# trend_legend = [
+#     Line2D([0], [0], color='blue',  linewidth=2, label='阴影变多 (decreasing)'),
+#     Line2D([0], [0], color='red',   linewidth=2, label='阴影变少 (increasing)'),
+#     Line2D([0], [0], color='orange',linewidth=2, label='非单调 / 恒定'),
+# ]
+# ax.legend(handles=legend_handles + trend_legend,
+#           loc='lower right', fontsize=bigfontsize)
+#
+# plt.title("09‑10 AM Shadow‑Ratio Trend on Edges  ↑North", fontsize=16)
+# plt.show()
+
 # 合并阴影(仅用于可视化)
 shadow_union = unary_union(shadow_gdf.geometry)
 
@@ -348,10 +444,14 @@ print(f"trend_interval_map 构建总耗时记录: {(time.time()-auto_tmap_start)
 # ----------------------------------------------------------------------------
 # 2. A* 搜索：多状态 + 时变代价 + 全流程计时
 # ----------------------------------------------------------------------------
-
+explored_markers = []
 def update_cool_route(coef, start_time, sample_interval=300):
     """返回 GeoDataFrame: 最优阴影‑感知路径  + 控制台打印完整计时统计"""
-
+    # ★★★ 可视化 ‑ 先清除旧的绿点 ★★★
+    global explored_markers
+    for h in explored_markers:
+        h.remove()
+    explored_markers = []
     # --- 起终点 ---
     origin_node = ox.distance.nearest_nodes(G, X=manual_origin_point_wgs84[1],      Y=manual_origin_point_wgs84[0])
     goal_node   = ox.distance.nearest_nodes(G, X=manual_destination_point_wgs84[1], Y=manual_destination_point_wgs84[0])
@@ -364,7 +464,7 @@ def update_cool_route(coef, start_time, sample_interval=300):
     td_calls             = 0     # cost 调用计数
     h_calls              = 0     # heuristic 调用计数
     neighbor_visits      = 0     # 邻居计数
-
+    explored_count       = 0     # ★ 新增：统计已展开节点数
     # =============== 函数定义 ===============
     speed = 10 * 1000 / 3600  # m/s
     goal_lat, goal_lon = G.nodes[goal_node]['y'], G.nodes[goal_node]['x']
@@ -388,6 +488,7 @@ def update_cool_route(coef, start_time, sample_interval=300):
         minute = future_dt.hour * 60 + future_dt.minute
         ratio = 0.5  # 保守设全阳，可替换为更复杂预测
         h_val = dist * (1 + coef * ratio)
+        h_val = 2*dist#假如是欧几里得距离的时候
         t_heuristic_accum += (time.time() - t0)
         return h_val
 
@@ -424,6 +525,15 @@ def update_cool_route(coef, start_time, sample_interval=300):
 
     while open_q:
         f_val, cur, cur_t = heapq.heappop(open_q)
+
+        # ★★★ 画绿色点标记已展开节点 ★★★
+        explored_count += 1
+        lat, lon = G.nodes[cur]['y'], G.nodes[cur]['x']
+        x, y = transformer_from_wgs84.transform(lon, lat)
+        marker = ax.plot(x, y, '.', color='green', markersize=4)[0]
+        explored_markers.append(marker)
+
+
         if cur == goal_node:
             break
         arr_dt = start_time + timedelta(seconds=cur_t)
@@ -468,6 +578,7 @@ def update_cool_route(coef, start_time, sample_interval=300):
     print(f"Heuristic calls / time     : {h_calls} / {t_heuristic_accum:.4f} s")
     print(f"Cost calls      / time     : {td_calls} / {t_cost_accum:.4f} s")
     print(f"Neighbor visits  / time    : {neighbor_visits} / {t_neighbor_accum:.4f} s")
+    print(f"Nodes actually expanded    : {explored_count}")
     print("=============================================\n")
 
     return route
@@ -712,3 +823,4 @@ north_arrow = AnchoredText('↑ North', loc='upper left', pad=0, prop=dict(size=
 ax.add_artist(north_arrow)
 
 plt.show()
+

@@ -348,10 +348,14 @@ print(f"trend_interval_map 构建总耗时记录: {(time.time()-auto_tmap_start)
 # ----------------------------------------------------------------------------
 # 2. A* 搜索：多状态 + 时变代价 + 全流程计时
 # ----------------------------------------------------------------------------
-
+explored_markers = []
 def update_cool_route(coef, start_time, sample_interval=300):
     """返回 GeoDataFrame: 最优阴影‑感知路径  + 控制台打印完整计时统计"""
-
+    # ★★★ 可视化 ‑ 先清除旧的绿点 ★★★
+    global explored_markers
+    for h in explored_markers:
+        h.remove()
+    explored_markers = []
     # --- 起终点 ---
     origin_node = ox.distance.nearest_nodes(G, X=manual_origin_point_wgs84[1],      Y=manual_origin_point_wgs84[0])
     goal_node   = ox.distance.nearest_nodes(G, X=manual_destination_point_wgs84[1], Y=manual_destination_point_wgs84[0])
@@ -364,7 +368,7 @@ def update_cool_route(coef, start_time, sample_interval=300):
     td_calls             = 0     # cost 调用计数
     h_calls              = 0     # heuristic 调用计数
     neighbor_visits      = 0     # 邻居计数
-
+    explored_count       = 0     # ★ 新增：统计已展开节点数
     # =============== 函数定义 ===============
     speed = 10 * 1000 / 3600  # m/s
     goal_lat, goal_lon = G.nodes[goal_node]['y'], G.nodes[goal_node]['x']
@@ -388,6 +392,7 @@ def update_cool_route(coef, start_time, sample_interval=300):
         minute = future_dt.hour * 60 + future_dt.minute
         ratio = 0.5  # 保守设全阳，可替换为更复杂预测
         h_val = dist * (1 + coef * ratio)
+        h_val = 2*dist#假如是欧几里得距离的时候
         t_heuristic_accum += (time.time() - t0)
         return h_val
 
@@ -424,6 +429,15 @@ def update_cool_route(coef, start_time, sample_interval=300):
 
     while open_q:
         f_val, cur, cur_t = heapq.heappop(open_q)
+
+        # ★★★ 画绿色点标记已展开节点 ★★★
+        explored_count += 1
+        lat, lon = G.nodes[cur]['y'], G.nodes[cur]['x']
+        x, y = transformer_from_wgs84.transform(lon, lat)
+        marker = ax.plot(x, y, '.', color='green', markersize=4)[0]
+        explored_markers.append(marker)
+
+
         if cur == goal_node:
             break
         arr_dt = start_time + timedelta(seconds=cur_t)
@@ -468,6 +482,7 @@ def update_cool_route(coef, start_time, sample_interval=300):
     print(f"Heuristic calls / time     : {h_calls} / {t_heuristic_accum:.4f} s")
     print(f"Cost calls      / time     : {td_calls} / {t_cost_accum:.4f} s")
     print(f"Neighbor visits  / time    : {neighbor_visits} / {t_neighbor_accum:.4f} s")
+    print(f"Nodes actually expanded    : {explored_count}")
     print("=============================================\n")
 
     return route
