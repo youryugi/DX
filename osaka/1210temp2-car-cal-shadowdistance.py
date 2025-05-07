@@ -39,7 +39,8 @@ city = LocationInfo(name="Osaka", region="Japan", timezone="Asia/Tokyo",
                     latitude=34.6937, longitude=135.5023)
 date_time = datetime(2024, 12, 5, 13, 10,
                      tzinfo=timezone(timedelta(hours=9)))
-
+date_time = datetime(2024, 9, 5, 15, 00,
+                     tzinfo=timezone(timedelta(hours=9)))
 solar_elevation = elevation(city.observer, date_time)
 solar_azimuth   = azimuth(city.observer,  date_time)
 print(f"太陽高度角: {solar_elevation:.2f}°")
@@ -176,24 +177,17 @@ fig.canvas.mpl_connect('button_press_event', on_map_click)
 # 路线加权函数
 # -------------------------
 def update_cool_route(coef):
-    shadow_lengths = []
+    costall = []
     for idx, row in gdf_edges.iterrows():
         edge_geom = row.geometry
         edge_length = edge_geom.length
         intersection_geom = edge_geom.intersection(shadow_union)
         shadowed_length = intersection_geom.length if not intersection_geom.is_empty else 0
-        shadow_ratio = shadowed_length / edge_length if edge_length > 0 else 0
-        sunny_dist = edge_length * (1 - shadow_ratio)
-        cost = edge_length + coef * sunny_dist
-        #cost = edge_length * (1 - coef * shadow_ratio)
-        # 更新了cost的逻辑
-        #sunny_dist = edge_length * (1 - shadow_ratio)
-        #cost = sunny_dist + coef * edge_length
-        #cost = sunny_dist
-        #print(cost)
-        shadow_lengths.append(cost)
+        #sunny_dist = edge_length-shadowed_length
+        cost = edge_length - coef * shadowed_length
+        costall.append(cost)
 
-    gdf_edges['cool_weight'] = shadow_lengths
+    gdf_edges['cool_weight'] = costall
 
     for (u,v,k), val in zip(gdf_edges.index, gdf_edges['cool_weight']):
         if (u,v,k) in G.edges:
@@ -209,9 +203,13 @@ def update_cool_route(coef):
     new_cool_route_edges = [(new_cool_route[i], new_cool_route[i+1], 0) for i in range(len(new_cool_route)-1)]
     new_cool_route_gdf = gdf_edges.loc[new_cool_route_edges]
 
-    new_cool_route_gdf = new_cool_route_gdf.copy()
-    new_cool_route_gdf['geometry'] = new_cool_route_gdf.geometry.apply(lambda g: translate(g, xoff=1.5, yoff=1.5))
-    return new_cool_route_gdf
+
+    # —— ② 仅用于绘图的平移副本 (不影响 cool_route_gdf) ——
+    plot_gdf = new_cool_route_gdf.copy()
+    plot_gdf['geometry'] = plot_gdf.geometry.apply(
+        lambda g: translate(g, xoff=1.5, yoff=1.5)
+    )
+    return new_cool_route_gdf, plot_gdf
 
 ### === 新增：计算阴影/非阴影长度 === ###
 def calc_shadow_stats(route_gdf):
@@ -244,7 +242,7 @@ button_update = Button(ax_button_update, 'Update Route')
 
 def update_route(event):
     coef_val = coef_slider.val
-    new_route_gdf = update_cool_route(coef_val)
+    new_route_gdf,plot_gdf = update_cool_route(coef_val)
 
     # 移除旧线
     for artist in ax.lines + ax.collections:
@@ -252,7 +250,7 @@ def update_route(event):
             artist.remove()
 
     if new_route_gdf is not None:
-        new_route_gdf.plot(ax=ax, color='green', linewidth=2, label='Wanted Bike Route')
+        plot_gdf.plot(ax=ax, color='green', linewidth=2, label='Wanted Bike Route')
         ### === 新增：统计打印 === ###
         tot, shad, sun = calc_shadow_stats(new_route_gdf)
         print(f"[Wanted Route] 总长: {tot:.1f} m, 阴影: {shad:.1f} m, 阳光: {sun:.1f} m")
@@ -293,12 +291,12 @@ def generate_path(event):
 
     # Wanted Route
     coef_val = coef_slider.val
-    new_route_gdf = update_cool_route(coef_val)
+    new_route_gdf,plot_gdf = update_cool_route(coef_val)
     for artist in ax.lines + ax.collections:
         if artist.get_label() == 'Wanted Bike Route':
             artist.remove()
     if new_route_gdf is not None:
-        new_route_gdf.plot(ax=ax, color='green', linewidth=2, label='Wanted Bike Route')
+        plot_gdf.plot(ax=ax, color='green', linewidth=2, label='Wanted Bike Route')
         ### === 新增：统计打印 === ###
         tot, shad, sun = calc_shadow_stats(new_route_gdf)
         print(f"[Wanted Route] 总长: {tot:.1f} m, 阴影: {shad:.1f} m, 阳光: {sun:.1f} m")
