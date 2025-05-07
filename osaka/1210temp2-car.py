@@ -153,7 +153,7 @@ bbox = (building_bounds_wgs84[3], building_bounds_wgs84[1],
         building_bounds_wgs84[2], building_bounds_wgs84[0])
 print('downlaoding OSM data...')
 print('bbox:', bbox)
-G = ox.graph_from_bbox(north=bbox[0], south=bbox[1], east=bbox[2], west=bbox[3], network_type="bike")
+G = ox.graph_from_bbox(north=bbox[0], south=bbox[1], east=bbox[2], west=bbox[3], network_type="drive")
 print(f"number of nodes: {len(G.nodes)}")
 print(f"number of edges: {len(G.edges)}")
 
