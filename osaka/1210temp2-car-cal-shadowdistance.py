@@ -117,10 +117,10 @@ legend_handles = [
     Patch(facecolor='yellow', label='Road'),
     Patch(facecolor='lightblue', label='Building'),
     Patch(facecolor='gray', edgecolor='gray', label='Shadow'),
-    Line2D([0], [0], marker='o', color='blue', markersize=8, linestyle='None', label='Start Point'),
-    Line2D([0], [0], marker='o', color='magenta', markersize=8, linestyle='None', label='End Point'),
-    Line2D([0], [0], color='red', linewidth=2, label='Shortest Route'),
-    Line2D([0], [0], color='green', linewidth=2, label='Cool Route'),
+    Line2D([0], [0], marker='o', color='blue', markersize=8, linestyle='None', label='Start point'),
+    Line2D([0], [0], marker='o', color='magenta', markersize=8, linestyle='None', label='End point'),
+    Line2D([0], [0], color='red', linewidth=2, label='Shortest route'),
+    Line2D([0], [0], color='green', linewidth=2, label='Shade-aware route'),
 ]
 plt.title("Roads, buildings, and shadows     ↑North\n大阪府　大阪市　阿倍野区　桃ケ池町１丁目", fontsize=16)
 plt.legend(handles=legend_handles, loc='lower left',fontsize=bigfontsize)
