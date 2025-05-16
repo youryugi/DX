@@ -183,8 +183,9 @@ def update_cool_route(coef):
         edge_length = edge_geom.length
         intersection_geom = edge_geom.intersection(shadow_union)
         shadowed_length = intersection_geom.length if not intersection_geom.is_empty else 0
-        #sunny_dist = edge_length-shadowed_length
-        cost = edge_length - coef * shadowed_length
+        sunny_dist = edge_length-shadowed_length
+        cost = edge_length - coef * shadowed_length # 这个好像是错的，应该是对的吧
+        #cost = sunny_dist + coef * edge_length
         costall.append(cost)
 
     gdf_edges['cool_weight'] = costall
