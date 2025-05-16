@@ -385,9 +385,9 @@ def update_cool_route(coef, start_time, sample_interval=300):
         # 估计抵达该直线距离所需时间 (保守取直线)
         est_dt = cur_time_s + dist / speed
         future_dt = start_time + timedelta(seconds=est_dt)
-        minute = future_dt.hour * 60 + future_dt.minute
-        ratio = 0.5  # 保守设全阳，可替换为更复杂预测
-        h_val = dist * (1 + coef * ratio)
+        #minute = future_dt.hour * 60 + future_dt.minute
+        #ratio = 0.5  # 保守设全阳，可替换为更复杂预测
+        h_val = dist
         t_heuristic_accum += (time.time() - t0)
         return h_val
 
@@ -504,7 +504,7 @@ def update_static_route(coef, start_time):
         except AttributeError:                           # OSMnx 1.x
             dist = ox.distance.euclidean_dist_vec(lat1, lon1, lat2, lon2)
         # 最坏情况：sunny_dist = length
-        return dist * (1 + coef)
+        return dist
 
     # ---------- 4. A* 主循环 ----------
     open_pq = [(0.0, orig_node)]
