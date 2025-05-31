@@ -13,7 +13,7 @@ x = np.arange(len(labels)) * 1.6  # 人为拉大间距，避免柱子太拥挤
 fig, ax = plt.subplots(figsize=(8, 5.5))
 
 # 画阳光段（底部红色）
-ax.bar(x, sunny_lengths, color='red', label='Sunny segment')
+ax.bar(x, sunny_lengths, color='red', label='Sun-exposed segment')
 
 # 画阴影段（顶部绿色）
 ax.bar(x, shadow_lengths, bottom=sunny_lengths, color='green', label='Shaded segment')
