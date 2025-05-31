@@ -54,7 +54,7 @@ with open("edge_shadow_ratios_20241205_0900_1000_1min_LL_135.5122_34.6246_UR_135
     precomputed = pickle.load(f)
 shadow_file = r"shadows_20241205_0900_1000_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl"
 #设置固定点还是手动
-manual_input_mode = True
+manual_input_mode = False
 manual_origin_point_wgs84 = (34.632734242239636, 135.51493454131852)
 manual_destination_point_wgs84 = (34.63049080065106, 135.54547444776205)
 manual_origin_point_wgs84 = (34.62709838787363, 135.5151808481631)#大地图
@@ -486,6 +486,7 @@ def update_static_route(coef, start_time):
 
     orig_node = ox.distance.nearest_nodes(G, X=origin_point_wgs84[1], Y=origin_point_wgs84[0])
     dest_node = ox.distance.nearest_nodes(G, X=destination_point_wgs84[1], Y=destination_point_wgs84[0])
+
     # ---------- 2. 固定时间戳 ----------
     fixed_t = find_nearest_time(time_to_union.keys(), start_time)
 
