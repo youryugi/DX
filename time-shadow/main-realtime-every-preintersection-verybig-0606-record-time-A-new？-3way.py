@@ -54,7 +54,7 @@ with open("edge_shadow_ratios_20241205_0900_1000_1min_LL_135.5122_34.6246_UR_135
     precomputed = pickle.load(f)
 shadow_file = r"shadows_20241205_0900_1000_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl"
 #设置固定点还是手动
-manual_input_mode = True
+manual_input_mode = False
 manual_origin_point_wgs84 = (34.632734242239636, 135.51493454131852)
 manual_destination_point_wgs84 = (34.63049080065106, 135.54547444776205)
 manual_origin_point_wgs84 = (34.62709838787363, 135.5151808481631)#大地图
@@ -353,8 +353,12 @@ def update_cool_route(coef, start_time, sample_interval=300):
     """返回 GeoDataFrame: 最优阴影‑感知路径  + 控制台打印完整计时统计"""
 
     # --- 起终点 ---
-    origin_node = ox.distance.nearest_nodes(G, X=manual_origin_point_wgs84[1],      Y=manual_origin_point_wgs84[0])
-    goal_node   = ox.distance.nearest_nodes(G, X=manual_destination_point_wgs84[1], Y=manual_destination_point_wgs84[0])
+    if origin_point_wgs84 is not None and destination_point_wgs84 is not None:
+        origin_node = ox.distance.nearest_nodes(G, X=origin_point_wgs84[1], Y=origin_point_wgs84[0])
+        goal_node   = ox.distance.nearest_nodes(G, X=destination_point_wgs84[1], Y=destination_point_wgs84[0])
+    else:
+        origin_node = ox.distance.nearest_nodes(G, X=manual_origin_point_wgs84[1], Y=manual_origin_point_wgs84[0])
+        goal_node   = ox.distance.nearest_nodes(G, X=manual_destination_point_wgs84[1], Y=manual_destination_point_wgs84[0])
 
     # =============== 全局计时器 ===============
     t_global_start       = time.time()
@@ -405,7 +409,7 @@ def update_cool_route(coef, start_time, sample_interval=300):
             #cost_acc += (sunny_len + coef * length) * (dt / duration)老的cost了 也需要更新
             #step_cost = length - coef * shadow_ratio * length
             #cost = sunny_dist + coef * edge_length 这个好像才对？
-            cost_acc +=sunny_len+ coef * length
+            cost_acc +=length - coef * ratio * length
             tmp_dt  += timedelta(seconds=dt)
             remain  -= dt
         t_cost_accum += (time.time() - t0)
@@ -529,7 +533,7 @@ def update_static_route(coef, start_time):
             #step_cost = sunny_dist + coef * length
             #cost = edge_length - coef * shadowed_length 改成这个咋样
             #cost = sunny_dist + coef * edge_length 这个好像才对？
-            step_cost = sunny_dist+ coef * length
+            step_cost = length - coef * shadow_ratio* length
             tentative = g_cost[cur] + step_cost
 
             if tentative < g_cost.get(nbr, float('inf')):
@@ -660,17 +664,15 @@ def generate_path(event):
         for a in ax.lines + ax.collections:
             if a.get_label() == 'Static A* Route':
                 a.remove()
-        # ✅ 加上偏移
+        # 先统计，再偏移再画
+        print("static A* route:")
+        calculate_shadow_stats(static_route_gdf, time_to_union, start_time, coef=coef_slider.val)
+        # ✅ 加上偏移再画
         from shapely.affinity import translate
         static_route_gdf['geometry'] = static_route_gdf.geometry.apply(
             lambda g: translate(g, xoff=-6.0, yoff=6.0)
         )
-        # 再绘图
         static_route_gdf.plot(ax=ax, color='orange', linewidth=2, label='Static A* Route')
-
-        print("static A* route:")
-        calculate_shadow_stats(static_route_gdf,
-                               time_to_union, start_time, coef=coef_slider.val)
 
 
 button_generate.on_clicked(generate_path)
