@@ -322,29 +322,6 @@ start_time = date_time
 # 重点：在多状态 Dijkstra 里使用 precomputed，而不再 intersection()
 # ---------------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------
-# 1. 构建边阴影趋势查询表（IntervalIndex）并计时
-# ----------------------------------------------------------------------------
-
-def build_trend_interval_map(edge_trend_map):
-    """将 {edge: [ {start,end,type}, ... ]} -> {edge: (IntervalIndex, [type])}"""
-    import pandas as pd
-    t0 = time.time()
-    tmap = {}
-    for key, segs in edge_trend_map.items():
-        starts = [s['start'] for s in segs]
-        ends   = [s['end']   for s in segs]
-        types  = [s['type']  for s in segs]
-        tmap[key] = (pd.IntervalIndex.from_arrays(starts, ends, closed='left'), types)
-    print(f"[计时] trend_interval_map 构建完毕: {time.time()-t0:.4f}s  (edges={len(tmap)})")
-    return tmap
-
-# 由外部脚本提供 edge_trend_map
-auto_tmap_start = time.time()
-with open("edge_trend_map_20241205_0900_1000_1min_LL_135.5122_34.6246_UR_135.5502_34.6502.pkl", "rb") as f:
-    edge_trend_map = pickle.load(f)
-trend_interval_map = build_trend_interval_map(edge_trend_map)
-print(f"trend_interval_map 构建总耗时记录: {(time.time()-auto_tmap_start):.4f}s\n")
-
 # ----------------------------------------------------------------------------
 # 2. A* 搜索：多状态 + 时变代价 + 全流程计时
 # ----------------------------------------------------------------------------
