@@ -36,9 +36,9 @@ road_gml_files = [os.path.join(road_dir, f) for f in [
 ]]
 
 # ==== 时间参数 ====
-start_hour = 9
-end_hour = 10
-step_min = 30
+start_hour = 6
+end_hour = 18
+step_min = 5
 date_str = "2025-07-05"
 city = LocationInfo(name="Osaka", region="Japan", timezone="Asia/Tokyo", latitude=34.6937, longitude=135.5023)
 
