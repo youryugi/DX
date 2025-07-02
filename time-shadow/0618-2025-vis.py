@@ -6,7 +6,7 @@ import pandas as pd
 
 # 读取建筑和道路数据
 bldg_gml_files = [
-    r"..\time-shadow\bldg\51357463_bldg_6697_op.gml",
+    r"bldg\51357463_bldg_6697_op.gml",
     #r"bldg\51357451_bldg_6697_op.gml",
     # r"bldg\51357452_bldg_6697_op.gml",
     # r"bldg\51357453_bldg_6697_op.gml",
@@ -18,7 +18,7 @@ bldg_gml_files = [
     # r"bldg\51357473_bldg_6697_op.gml"
 ]
 road_gml_files = [
-    r"..\time-shadow\tran\51357463_tran_6697_op.gml",
+    r"tran\51357463_tran_6697_op.gml",
     # r"tran\51357451_tran_6697_op.gml",
     # r"tran\51357452_tran_6697_op.gml",
     # r"tran\51357453_tran_6697_op.gml",

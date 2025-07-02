@@ -6,11 +6,13 @@ import pandas as pd
 from collections import Counter
 from shapely.ops import nearest_points
 import os
+import matplotlib.colors as mcolors
+from matplotlib.patches import Patch
 
 print("1. 正在读取建筑数据...")
 bldg_gml_files = [
-        r"bldg\51357462_bldg_6697_op.gml",
-        #r"bldg\51357463_bldg_6697_op.gml",
+        #r"bldg\51357462_bldg_6697_op.gml",
+        r"bldg\51357463_bldg_6697_op.gml",
     # r"bldg\51357451_bldg_6697_op.gml",
     # r"bldg\51357452_bldg_6697_op.gml",
     # r"bldg\51357453_bldg_6697_op.gml",
@@ -22,7 +24,19 @@ bldg_gml_files = [
     # r"bldg\51357473_bldg_6697_op.gml"
 ]
 building_gdf = gpd.GeoDataFrame(pd.concat([gpd.read_file(f) for f in bldg_gml_files], ignore_index=True))
+# 只保留 usage 为 411、412、422 的建筑
 building_gdf['usage'] = building_gdf['usage'].astype(str).str.strip()
+building_gdf = building_gdf[building_gdf['usage'].str.startswith(('411', '412', '422'))]
+
+# 颜色映射
+usage_color_map = {
+    '411': '#4daf4a',   # 绿色
+    '412': '#984ea3',   # 紫色
+    '422': '#ff7f00',   # 橙色
+}
+default_color = '#cccccc'
+building_gdf['color'] = building_gdf['usage'].apply(lambda u: usage_color_map.get(u[:3], default_color))
+
 print("   建筑物总数：", len(building_gdf))
 print("usage 字段唯一值（处理后）：", building_gdf['usage'].unique())
 
@@ -95,6 +109,7 @@ bldg_422_centroids = bldg_422.geometry.centroid
 paired_422_x = []
 paired_422_y = []
 
+# ===== 411→最近422 =====
 for idx, b411_centroid in enumerate(bldg_411_centroids):
     # 找最近的422建筑
     distances = bldg_422_centroids.distance(b411_centroid)
@@ -121,34 +136,47 @@ for idx, b411_centroid in enumerate(bldg_411_centroids):
         print(f"   第{idx+1}个411建筑与最近的422建筑之间无路径")
         continue
 
-# ===== 新增：411连接所有名字含"駅"的建筑 =====
-if 'name' in building_gdf.columns:
-    eki_bldg = building_gdf[building_gdf['name'].str.contains('駅', na=False)]
-    eki_centroids = eki_bldg.geometry.centroid
-    print(f"   名字含'駅'的建筑数：{len(eki_bldg)}")
-    for idx, b411_centroid in enumerate(bldg_411_centroids):
-        for eki_idx, eki_centroid in eki_centroids.items():
-            # 坐标转换到WGS84
-            b411_centroid_wgs = gpd.GeoSeries([b411_centroid], crs=projected_crs).to_crs(epsg=4326).iloc[0]
-            eki_centroid_wgs = gpd.GeoSeries([eki_centroid], crs=projected_crs).to_crs(epsg=4326).iloc[0]
-            orig_node = ox.distance.nearest_nodes(G, X=b411_centroid_wgs.x, Y=b411_centroid_wgs.y)
-            dest_node = ox.distance.nearest_nodes(G, X=eki_centroid_wgs.x, Y=eki_centroid_wgs.y)
-            try:
-                path = nx.shortest_path(G, source=orig_node, target=dest_node, weight='length')
-                all_paths.append(path)
-                for u, v in zip(path[:-1], path[1:]):
-                    edge = (u, v) if G.has_edge(u, v) else (v, u)
-                    edge_counter[edge] += 1
-            except nx.NetworkXNoPath:
-                continue
-    print("   已完成411→駅的所有路径统计")
+# ===== 412→最近422，频率乘以22.5 =====
+bldg_412 = building_gdf[building_gdf['usage'].str.startswith('412')]
+bldg_412_centroids = bldg_412.geometry.centroid
+for idx, b412_centroid in enumerate(bldg_412_centroids):
+    distances = bldg_422_centroids.distance(b412_centroid)
+    nearest_422_idx = distances.idxmin()
+    nearest_422_centroid = bldg_422_centroids.loc[nearest_422_idx]
+
+    b412_centroid_wgs = gpd.GeoSeries([b412_centroid], crs=projected_crs).to_crs(epsg=4326).iloc[0]
+    nearest_422_centroid_wgs = gpd.GeoSeries([nearest_422_centroid], crs=projected_crs).to_crs(epsg=4326).iloc[0]
+    orig_node = ox.distance.nearest_nodes(G, X=b412_centroid_wgs.x, Y=b412_centroid_wgs.y)
+    dest_node = ox.distance.nearest_nodes(G, X=nearest_422_centroid_wgs.x, Y=nearest_422_centroid_wgs.y)
+
+    try:
+        path = nx.shortest_path(G, source=orig_node, target=dest_node, weight='length')
+        for u, v in zip(path[:-1], path[1:]):
+            edge = (u, v) if G.has_edge(u, v) else (v, u)
+            edge_counter[edge] += 22.5  # 频率乘以22.5
+        if (idx + 1) % 100 == 0 or (idx + 1) == len(bldg_412_centroids):
+            print(f"   已处理 {idx+1}/{len(bldg_412_centroids)} 个412建筑")
+    except nx.NetworkXNoPath:
+        print(f"   第{idx+1}个412建筑与最近的422建筑之间无路径")
+        continue
+
+# 路网投影到 EPSG:6669
+if G.graph.get('crs') != 'epsg:6669':
+    G_proj = ox.project_graph(G, to_crs='epsg:6669')
 else:
-    print("未找到'name'字段，无法统计411→駅的路径")
+    G_proj = G
 
-print("5. 正在可视化结果...")
+# 可视化
 fig, ax = plt.subplots(figsize=(12, 8))
-ox.plot_graph(G, ax=ax, show=False, close=False, edge_color='lightgray', node_size=0, edge_linewidth=0.5)
+ox.plot_graph(G_proj, ax=ax, show=False, close=False, edge_color='lightgray', node_size=0, edge_linewidth=0.5)
 
+if 'road_gdf' in locals():
+    road_gdf = road_gdf.to_crs(epsg=6669)
+    road_gdf.plot(ax=ax, color='black', linewidth=1, alpha=0.5, label='Road')
+
+building_gdf.plot(ax=ax, color=building_gdf['color'], edgecolor='k', linewidth=0.5, alpha=0.9)
+
+# 3. 画路径频率线
 max_freq = max(edge_counter.values()) if edge_counter else 1
 for (u, v), freq in edge_counter.items():
     data = G.get_edge_data(u, v)
@@ -161,18 +189,16 @@ for (u, v), freq in edge_counter.items():
             ys = [G.nodes[u]['y'], G.nodes[v]['y']]
         ax.plot(xs, ys, color='red', linewidth=1 + 4 * freq / max_freq, alpha=0.8)
 
-# 画所有411建筑中心点
-ax.scatter(bldg_411_centroids.x, bldg_411_centroids.y, color='green', s=20, label='411 buildings')
-# 画所有配对过的422建筑中心点
-ax.scatter(paired_422_x, paired_422_y, color='blue', s=20, label='Paired 422 buildings')
-# 画所有422建筑中心点（橙色）
-ax.scatter(
-    bldg_422_centroids.x, bldg_422_centroids.y,
-    color='orange', s=120, marker='*', label='All 422 buildings',
-    edgecolors='black', linewidths=1, zorder=10
-)
+# 4. 图例
+legend_handles = [
+    Patch(facecolor=usage_color_map['411'], label='411'),
+    Patch(facecolor=usage_color_map['412'], label='412'),
+    Patch(facecolor=usage_color_map['422'], label='422'),
+    Patch(facecolor='black', label='Road')
+]
+plt.legend(handles=legend_handles, loc='upper right', fontsize=12)
 
-plt.title("Shortest Path Edge Frequency (411→422)")
-plt.legend()
+plt.title("Shortest Path Edge Frequency and Building Usage", fontsize=16)
+plt.tight_layout()
 plt.show()
 print("全部完成！")
