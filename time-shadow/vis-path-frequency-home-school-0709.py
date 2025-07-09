@@ -12,13 +12,13 @@ from matplotlib.patches import Patch
 print("1. 正在读取建筑数据...")
 bldg_gml_files = [
         #r"bldg\51357462_bldg_6697_op.gml",
-        r"bldg\51357463_bldg_6697_op.gml",
-    # r"bldg\51357451_bldg_6697_op.gml",
-    # r"bldg\51357452_bldg_6697_op.gml",
-    # r"bldg\51357453_bldg_6697_op.gml",
-    # r"bldg\51357461_bldg_6697_op.gml",
-    # r"bldg\51357462_bldg_6697_op.gml",
-    # r"bldg\51357463_bldg_6697_op.gml",
+        #r"bldg\51357463_bldg_6697_op.gml",
+    r"bldg\51357451_bldg_6697_op.gml",
+    r"bldg\51357452_bldg_6697_op.gml",
+    r"bldg\51357453_bldg_6697_op.gml",
+    r"bldg\51357461_bldg_6697_op.gml",
+    r"bldg\51357462_bldg_6697_op.gml",
+    r"bldg\51357463_bldg_6697_op.gml",
     # r"bldg\51357471_bldg_6697_op.gml",
     # r"bldg\51357472_bldg_6697_op.gml",
     # r"bldg\51357473_bldg_6697_op.gml"
@@ -178,23 +178,28 @@ building_gdf.plot(ax=ax, color=building_gdf['color'], edgecolor='k', linewidth=0
 
 # 3. 画路径频率线
 max_freq = max(edge_counter.values()) if edge_counter else 1
+
 for (u, v), freq in edge_counter.items():
-    data = G.get_edge_data(u, v)
+    data = G_proj.get_edge_data(u, v)  # <- 用投影后的图
     if data:
-        geom = data[0].get('geometry', None)
+        geom = data[0].get('geometry')
         if geom is not None:
             xs, ys = geom.xy
         else:
-            xs = [G.nodes[u]['x'], G.nodes[v]['x']]
-            ys = [G.nodes[u]['y'], G.nodes[v]['y']]
-        ax.plot(xs, ys, color='red', linewidth=1 + 4 * freq / max_freq, alpha=0.8)
+            xs = [G_proj.nodes[u]['x'], G_proj.nodes[v]['x']]
+            ys = [G_proj.nodes[u]['y'], G_proj.nodes[v]['y']]
+        ax.plot(xs, ys,
+                color='red',
+                linewidth=1 + 4 * freq / max_freq,
+                alpha=0.8)
+
 
 # 4. 图例
 legend_handles = [
-    Patch(facecolor=usage_color_map['411'], label='411'),
-    Patch(facecolor=usage_color_map['412'], label='412'),
-    Patch(facecolor=usage_color_map['422'], label='422'),
-    Patch(facecolor='black', label='Road')
+    Patch(facecolor=usage_color_map['411'], label='Single-family house'),
+    Patch(facecolor=usage_color_map['412'], label='Apartment / Condominium'),
+    Patch(facecolor=usage_color_map['422'], label='School'),
+    #Patch(facecolor='black', label='Road')
 ]
 plt.legend(handles=legend_handles, loc='upper right', fontsize=12)
 
@@ -202,3 +207,34 @@ plt.title("Shortest Path Edge Frequency and Building Usage", fontsize=16)
 plt.tight_layout()
 plt.show()
 print("全部完成！")
+
+# ---------- 新增：保存 edge_counter 为文件 ----------
+print("5. 保存边频率……")
+freq_records = []
+for (u, v), freq in edge_counter.items():
+    # 取投影后图中的几何；若无则用直线
+    data = G_proj.get_edge_data(u, v)
+    if data:
+        geom = data[0].get('geometry')
+    else:
+        geom = None
+    freq_records.append({
+        'u': u,
+        'v': v,
+        'freq': freq,
+        'geometry': geom
+    })
+
+# 转为 GeoDataFrame（若缺少几何也没问题）
+freq_gdf = gpd.GeoDataFrame(freq_records, geometry='geometry', crs='EPSG:6669')
+
+# 生成简短文件名
+freq_tag = os.path.splitext(graphml_path)[0].replace('cached_network_', '')
+gpkg_path = f"edge_freq_home-school{freq_tag}.gpkg"
+csv_path  = f"edge_freq_home-school{freq_tag}.csv"
+
+# 保存
+freq_gdf.to_file(gpkg_path, layer='edge_freq', driver='GPKG')
+freq_gdf.drop(columns='geometry').to_csv(csv_path, index=False)
+print(f"   已保存到 {gpkg_path} 与 {csv_path}")
+# ---------------------------------------------------

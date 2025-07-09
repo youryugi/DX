@@ -9,8 +9,8 @@ import os
 
 print("1. 正在读取建筑数据...")
 bldg_gml_files = [
-        r"bldg\51357462_bldg_6697_op.gml",
-        #r"bldg\51357463_bldg_6697_op.gml",
+        #r"bldg\51357462_bldg_6697_op.gml",
+        r"bldg\51357463_bldg_6697_op.gml",
         #r"bldg\51357464_bldg_6697_op.gml",
         #r"bldg\51357452_bldg_6697_op.gml",
         #r"bldg\51357453_bldg_6697_op.gml",
