@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-Shortest‑path edge‑frequency analysis between school buildings (usage 422)
+Shortest‑path edge‑frequency analysis between residential buildings (usage 411/412)
 and the nearest railway station ("駅") in a given area.
 
-Key updates for the 422‑only version
-------------------------------------
-* Switched every reference from 411/412 (residential) to 422 (schools).
-* Removed the apartment‑specific frequency multiplier logic.
-* Added a dedicated colour for schools in the map legend.
-* Simplified the path‑accumulation section (single origin category).
+Key fixes compared with the previous draft
+-----------------------------------------
+* Added **default_color** and **usage_color_map** so that every building gets a colour.
+* Replaced all phantom references to usage "422" with the explicit keyword "station".
+* Unified variable names:  bldg_station   (instead of pseudo‑"422")
+* Guarded against missing CRS information; converts to EPSG:4326 before graph download.
+* Collected configurable parameters (padding, projected CRS, 412 frequency multiplier) at the top.
+* Added simple progress messages and exception handling for robustness.
 """
 
 import os
@@ -26,12 +28,14 @@ from matplotlib.patches import Patch
 # --------------------------------------------------
 PADDING_DEG = 0.001        # ~110 m latitude‑wise
 PROJECTED_CRS = 6669       # JGD2011 / Japan Plane Rectangular CS II (fits Kobe‑Osaka‑Kyoto)
+FREQ_MULT_412 = 22.5       # weight for apartment trips
 
 # Colours
 DEFAULT_COLOR = "#d9d9d9"  # light grey for unclassified buildings
 USAGE_COLOR_MAP = {
-    "422": "#984ea3",   # purple – School
-    "station": "#ff7f00"  # orange – 駅  (railway station)
+    "411": "#4daf4a",   # green   – Single‑family house
+    "412": "#377eb8",   # blue    – Apartment / Condominium
+    "station": "#ff7f00"  # orange  – 駅  (railway station)
 }
 
 # --------------------------------------------------
@@ -51,16 +55,18 @@ building_gdf = gpd.GeoDataFrame(
     pd.concat([gpd.read_file(f) for f in BLDG_GML_FILES], ignore_index=True)
 )
 
-# Filter: usage == 422 OR name contains "駅"
+# Filter: usage starts with 411/412 OR name contains "駅"
 print("   按 usage 与名称过滤…")
-is_422 = building_gdf["usage"].astype(str).str.startswith("422")
+is_411 = building_gdf["usage"].astype(str).str.startswith("411")
+is_412 = building_gdf["usage"].astype(str).str.startswith("412")
 is_station = building_gdf["name"].fillna("").str.contains("駅", regex=False)
 
-building_gdf = building_gdf[is_422 | is_station].copy()
+building_gdf = building_gdf[is_411 | is_412 | is_station].copy()
 
 # Assign colours
 building_gdf["color"] = DEFAULT_COLOR
-building_gdf.loc[is_422, "color"] = USAGE_COLOR_MAP["422"]
+building_gdf.loc[is_411, "color"] = USAGE_COLOR_MAP["411"]
+building_gdf.loc[is_412, "color"] = USAGE_COLOR_MAP["412"]
 building_gdf.loc[is_station, "color"] = USAGE_COLOR_MAP["station"]
 
 print("   过滤后建筑总数:", len(building_gdf))
@@ -71,6 +77,7 @@ print("   usage 唯一值:", building_gdf["usage"].unique())
 # --------------------------------------------------
 print("2. 计算建筑物范围并下载对应路网…")
 if building_gdf.crs is None:
+    # Assume source CRS is already EPSG:4326 (most PLATEAU GML files are)
     building_gdf.set_crs(epsg=4326, inplace=True)
 elif building_gdf.crs.to_epsg() != 4326:
     building_gdf = building_gdf.to_crs(epsg=4326)
@@ -99,19 +106,21 @@ print("   路网加载完成: 节点", len(G.nodes), "边", len(G.edges))
 # --------------------------------------------------
 # 4) Prepare centroid lists (projected CRS for distance calcs)
 # --------------------------------------------------
-print("3. 计算学校 / 駅 的质心…")
+print("3. 计算住宅 / 駅 的质心…")
 if building_gdf.crs.to_epsg() != PROJECTED_CRS:
     building_gdf_proj = building_gdf.to_crs(epsg=PROJECTED_CRS)
 else:
     building_gdf_proj = building_gdf
 
-bldg_422 = building_gdf_proj[building_gdf_proj["usage"].astype(str).str.startswith("422")]
+bldg_411 = building_gdf_proj[building_gdf_proj["usage"].astype(str).str.startswith("411")]
+bldg_412 = building_gdf_proj[building_gdf_proj["usage"].astype(str).str.startswith("412")]
 bldg_station = building_gdf_proj[is_station]
 
-if bldg_422.empty or bldg_station.empty:
-    raise RuntimeError("未找到 422 学校或 駅 建筑，无法继续。")
+if bldg_411.empty or bldg_station.empty:
+    raise RuntimeError("未找到 411 或 駅 建筑，无法继续。")
 
-bldg_422_cent = bldg_422.geometry.centroid
+bldg_411_cent = bldg_411.geometry.centroid
+bldg_412_cent = bldg_412.geometry.centroid
 bldg_station_cent = bldg_station.geometry.centroid
 
 # --------------------------------------------------
@@ -124,7 +133,7 @@ all_paths = []
 # Project road graph once for plotting
 G_proj = ox.project_graph(G, to_crs=f"EPSG:{PROJECTED_CRS}")
 
-def accumulate_paths(orig_series):
+def accumulate_paths(orig_series, multiplier=1.0):
     for i, orig_pt in enumerate(orig_series):
         # 最近 station
         dists = bldg_station_cent.distance(orig_pt)
@@ -142,15 +151,19 @@ def accumulate_paths(orig_series):
             for u, v in zip(path[:-1], path[1:]):
                 # Use consistent (u,v) ordering
                 edge = (u, v) if G.has_edge(u, v) else (v, u)
-                edge_counter[edge] += 1.0
+                edge_counter[edge] += multiplier
         except nx.NetworkXNoPath:
             print(f"   * 无路可达: 原点{i+1}")
             continue
         if (i + 1) % 100 == 0 or (i + 1) == len(orig_series):
-            print(f"   已处理 {i+1}/{len(orig_series)} 条记录")
+            print(f"   已处理 {i+1}/{len(orig_series)} 条记录 (mult={multiplier})")
 
-# 5a) 422 → 駅
-accumulate_paths(bldg_422_cent)
+# 5a) 411 → 駅  (权重 1)
+accumulate_paths(bldg_411_cent, multiplier=1.0)
+
+# 5b) 412 → 駅  (权重 FREQ_MULT_412)
+if not bldg_412_cent.empty:
+    accumulate_paths(bldg_412_cent, multiplier=FREQ_MULT_412)
 
 # --------------------------------------------------
 # 6) Visualisation
@@ -197,14 +210,15 @@ if edge_counter:
 
 # Legend
 legend_handles = [
-    Patch(facecolor=USAGE_COLOR_MAP["422"], label="School"),
+    Patch(facecolor=USAGE_COLOR_MAP["411"], label="Single‑family "),
+    Patch(facecolor=USAGE_COLOR_MAP["412"], label="Apartment "),
     Patch(facecolor=USAGE_COLOR_MAP["station"], label="Station"),
 ]
 ax.legend(handles=legend_handles, loc="upper right", fontsize=12)
-ax.set_title("Edge frequency: School → Station", fontsize=16)
+ax.set_title("Edge frequency: Residential → Station", fontsize=16)
 out_tag = bbox_str.replace("_", "-")  # shorter
 plt.tight_layout()
-plt.savefig(f"edge_freq_school-station_{out_tag}.png", dpi=300)
+plt.savefig(f"edge_freq_home-station_{out_tag}.png", dpi=300)
 plt.show()
 
 # --------------------------------------------------
@@ -219,7 +233,7 @@ for (u, v), freq in edge_counter.items():
 
 freq_gdf = gpd.GeoDataFrame(records, geometry="geometry", crs=f"EPSG:{PROJECTED_CRS}")
 
-out_tag = bbox_str.replace("_", "-")
-freq_gdf.to_file(f"edge_freq_school-station_{out_tag}.gpkg", layer="edge_freq", driver="GPKG")
-freq_gdf.drop(columns="geometry").to_csv(f"edge_freq_school-station_{out_tag}.csv", index=False)
+out_tag = bbox_str.replace("_", "-")  # shorter
+freq_gdf.to_file(f"edge_freq_home-station_{out_tag}.gpkg", layer="edge_freq", driver="GPKG")
+freq_gdf.drop(columns="geometry").to_csv(f"edge_freq_home-station_{out_tag}.csv", index=False)
 print("   完成！")

@@ -11,14 +11,15 @@ from matplotlib.patches import Patch
 
 print("1. 正在读取建筑数据...")
 bldg_gml_files = [
+        r"bldg/51357451_bldg_6697_op.gml",
         #r"bldg\51357462_bldg_6697_op.gml",
         #r"bldg\51357463_bldg_6697_op.gml",
-    r"bldg\51357451_bldg_6697_op.gml",
-    r"bldg\51357452_bldg_6697_op.gml",
-    r"bldg\51357453_bldg_6697_op.gml",
-    r"bldg\51357461_bldg_6697_op.gml",
-    r"bldg\51357462_bldg_6697_op.gml",
-    r"bldg\51357463_bldg_6697_op.gml",
+    # r"bldg\51357451_bldg_6697_op.gml",
+    # r"bldg\51357452_bldg_6697_op.gml",
+    # r"bldg\51357453_bldg_6697_op.gml",
+    # r"bldg\51357461_bldg_6697_op.gml",
+    # r"bldg\51357462_bldg_6697_op.gml",
+    # r"bldg\51357463_bldg_6697_op.gml",
     # r"bldg\51357471_bldg_6697_op.gml",
     # r"bldg\51357472_bldg_6697_op.gml",
     # r"bldg\51357473_bldg_6697_op.gml"
@@ -174,7 +175,13 @@ if 'road_gdf' in locals():
     road_gdf = road_gdf.to_crs(epsg=6669)
     road_gdf.plot(ax=ax, color='black', linewidth=1, alpha=0.5, label='Road')
 
-building_gdf.plot(ax=ax, color=building_gdf['color'], edgecolor='k', linewidth=0.5, alpha=0.9)
+building_gdf.plot(
+    ax=ax,
+    color=building_gdf['color'],
+    edgecolor=None,      # 没有黑边
+    linewidth=0,
+    alpha=0.9
+)
 
 # 3. 画路径频率线
 max_freq = max(edge_counter.values()) if edge_counter else 1
