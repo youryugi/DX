@@ -1,0 +1,82 @@
+nohup: ignoring input
+/mnt/ssd2T/yang/DX/2025/vis-path-frequency-office-station-0716.py:140: FutureWarning: The `north`, `south`, `east`, and `west` parameters are deprecated and will be removed in the v2.0.0 release. Use the `bbox` parameter instead. See the OSMnx v2 migration guide: https://github.com/gboeing/osmnx/issues/1123
+  G = ox.graph_from_bbox(maxy, miny, maxx, minx, network_type="drive")
+/home/yang/anaconda3/envs/dx/lib/python3.11/site-packages/geopandas/geodataframe.py:1459: UserWarning: Boolean Series key will be reindexed to match DataFrame index.
+  result = super().__getitem__(key)
+/home/yang/anaconda3/envs/dx/lib/python3.11/site-packages/geopandas/geodataframe.py:1459: UserWarning: Boolean Series key will be reindexed to match DataFrame index.
+  result = super().__getitem__(key)
+Authorization required, but no authorization protocol specified
+
+/mnt/ssd2T/yang/DX/2025/vis-path-frequency-office-station-0716.py:221: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show()
+1. 正在读取建筑数据…
+   按 usage 与名称过滤…
+   过滤后建筑总数: 4978
+   usage 唯一值: [401. 431. 403.  nan 421. 402. 413.]
+2. 计算建筑物范围并下载对应路网…
+   路网下载范围: (34.59882, 34.66824, 135.48639, 135.55108)
+   无缓存，开始下载路网 (network_type='drive')…
+   路网已保存到 cached_network_34.59882_34.66824_135.48639_135.55108.graphml
+   路网加载完成: 节点 13629 边 37498
+3. 计算 office / 駅 的质心…
+4. 正在计算最短路径并统计边频率…
+   已处理 100/4934 条记录
+   已处理 200/4934 条记录
+   已处理 300/4934 条记录
+   * 无路可达: office 358
+   已处理 400/4934 条记录
+   * 无路可达: office 483
+   已处理 500/4934 条记录
+   已处理 600/4934 条记录
+   已处理 700/4934 条记录
+   已处理 800/4934 条记录
+   已处理 900/4934 条记录
+   已处理 1000/4934 条记录
+   已处理 1100/4934 条记录
+   已处理 1200/4934 条记录
+   已处理 1300/4934 条记录
+   已处理 1400/4934 条记录
+   已处理 1500/4934 条记录
+   已处理 1600/4934 条记录
+   已处理 1700/4934 条记录
+   已处理 1800/4934 条记录
+   已处理 1900/4934 条记录
+   已处理 2000/4934 条记录
+   已处理 2100/4934 条记录
+   已处理 2200/4934 条记录
+   已处理 2300/4934 条记录
+   已处理 2400/4934 条记录
+   已处理 2500/4934 条记录
+   * 无路可达: office 2574
+   已处理 2600/4934 条记录
+   已处理 2700/4934 条记录
+   已处理 2800/4934 条记录
+   * 无路可达: office 2851
+   * 无路可达: office 2898
+   已处理 2900/4934 条记录
+   已处理 3000/4934 条记录
+   已处理 3100/4934 条记录
+   已处理 3200/4934 条记录
+   已处理 3300/4934 条记录
+   已处理 3400/4934 条记录
+   已处理 3500/4934 条记录
+   已处理 3600/4934 条记录
+   已处理 3700/4934 条记录
+   已处理 3800/4934 条记录
+   已处理 3900/4934 条记录
+   已处理 4000/4934 条记录
+   已处理 4100/4934 条记录
+   已处理 4200/4934 条记录
+   已处理 4300/4934 条记录
+   已处理 4400/4934 条记录
+   已处理 4500/4934 条记录
+   * 无路可达: office 4581
+   已处理 4600/4934 条记录
+   已处理 4700/4934 条记录
+   已处理 4800/4934 条记录
+   已处理 4900/4934 条记录
+   已处理 4934/4934 条记录
+5. 绘图…
+6. 保存边频率数据…
+   完成！
+总用时: 820.1 秒

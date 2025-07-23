@@ -19,7 +19,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from collections import Counter
 from matplotlib.patches import Patch
+import time  # 新增
 
+start_time = time.time()  # 记录开始时间
 # --------------------------------------------------
 # 1) Configurable parameters
 # --------------------------------------------------
@@ -38,8 +40,58 @@ USAGE_COLOR_MAP = {
 # --------------------------------------------------
 print("1. 正在读取建筑数据…")
 BLDG_GML_FILES = [
-    r"bldg/51357451_bldg_6697_op.gml",
-    # 其他文件按需打开
+            r"../time-shadow/bldg/51357399_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357490_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357491_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357492_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357493_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357389_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357480_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357481_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357482_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357483_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357379_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357470_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357471_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357472_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357473_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357369_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357460_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357461_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357462_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357463_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357359_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357450_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357451_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357452_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357453_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357349_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357440_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357441_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357442_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357443_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357339_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357430_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357431_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357432_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357433_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357329_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357420_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357421_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357422_bldg_6697_op.gml",
+        r"../time-shadow/bldg/51357423_bldg_6697_op.gml",
+
+        #r"bldg\51357462_bldg_6697_op.gml",
+        #r"bldg\51357463_bldg_6697_op.gml",
+    # r"bldg\51357451_bldg_6697_op.gml",
+    # r"bldg\51357452_bldg_6697_op.gml",
+    # r"bldg\51357453_bldg_6697_op.gml",
+    # r"bldg\51357461_bldg_6697_op.gml",
+    # r"bldg\51357462_bldg_6697_op.gml",
+    # r"bldg\51357463_bldg_6697_op.gml",
+    # r"bldg\51357471_bldg_6697_op.gml",
+    # r"bldg\51357472_bldg_6697_op.gml",
+    # r"bldg\51357473_bldg_6697_op.gml"
 ]
 
 building_gdf = gpd.GeoDataFrame(
@@ -184,3 +236,6 @@ tag = bbox_str.replace("_", "-")
 freq_gdf.to_file(f"edge_freq_office-station_{tag}.gpkg", layer="edge_freq", driver="GPKG")
 freq_gdf.drop(columns="geometry").to_csv(f"edge_freq_office-station_{tag}.csv", index=False)
 print("   完成！")
+# 输出总用时
+elapsed = time.time() - start_time
+print(f"总用时: {elapsed:.1f} 秒")

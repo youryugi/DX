@@ -1,0 +1,81 @@
+nohup: ignoring input
+/mnt/ssd2T/yang/DX/2025/vis-path-frequency-school-station-0709.py:141: FutureWarning: The `north`, `south`, `east`, and `west` parameters are deprecated and will be removed in the v2.0.0 release. Use the `bbox` parameter instead. See the OSMnx v2 migration guide: https://github.com/gboeing/osmnx/issues/1123
+  G = ox.graph_from_bbox(maxy, miny, maxx, minx, network_type="drive")
+/home/yang/anaconda3/envs/dx/lib/python3.11/site-packages/geopandas/geodataframe.py:1459: UserWarning: Boolean Series key will be reindexed to match DataFrame index.
+  result = super().__getitem__(key)
+Authorization required, but no authorization protocol specified
+
+/mnt/ssd2T/yang/DX/2025/vis-path-frequency-school-station-0709.py:256: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show()
+1. 正在读取建筑数据…
+   按 usage 与名称过滤…
+   过滤后建筑总数: 5133
+   usage 唯一值: [422. 431. 403.  nan 421. 402. 401. 413.]
+2. 计算建筑物范围并下载对应路网…
+   路网下载范围: (34.59882, 34.66824, 135.48641, 135.55119)
+   无缓存，开始下载路网 (network_type='drive')…
+   路网已保存到 cached_network_34.59882_34.66824_135.48641_135.55119.graphml
+   路网加载完成: 节点 13645 边 37538
+3. 计算学校 / 駅 的质心…
+4. 正在计算最短路径并统计边频率…
+   已处理 100/5087 条记录
+   已处理 200/5087 条记录
+   * 无路可达: 原点256
+   已处理 300/5087 条记录
+   已处理 400/5087 条记录
+   已处理 500/5087 条记录
+   已处理 600/5087 条记录
+   * 无路可达: 原点607
+   * 无路可达: 原点627
+   * 无路可达: 原点638
+   已处理 700/5087 条记录
+   已处理 800/5087 条记录
+   已处理 900/5087 条记录
+   已处理 1000/5087 条记录
+   已处理 1100/5087 条记录
+   已处理 1200/5087 条记录
+   已处理 1300/5087 条记录
+   已处理 1400/5087 条记录
+   已处理 1500/5087 条记录
+   已处理 1600/5087 条记录
+   已处理 1700/5087 条记录
+   已处理 1800/5087 条记录
+   已处理 1900/5087 条记录
+   已处理 2000/5087 条记录
+   已处理 2100/5087 条记录
+   已处理 2200/5087 条记录
+   已处理 2300/5087 条记录
+   * 无路可达: 原点2390
+   已处理 2400/5087 条记录
+   * 无路可达: 原点2419
+   已处理 2500/5087 条记录
+   已处理 2600/5087 条记录
+   已处理 2700/5087 条记录
+   已处理 2800/5087 条记录
+   已处理 2900/5087 条记录
+   已处理 3000/5087 条记录
+   已处理 3100/5087 条记录
+   已处理 3200/5087 条记录
+   已处理 3300/5087 条记录
+   已处理 3400/5087 条记录
+   已处理 3500/5087 条记录
+   已处理 3600/5087 条记录
+   已处理 3700/5087 条记录
+   已处理 3800/5087 条记录
+   已处理 3900/5087 条记录
+   已处理 4000/5087 条记录
+   已处理 4100/5087 条记录
+   已处理 4200/5087 条记录
+   已处理 4300/5087 条记录
+   已处理 4400/5087 条记录
+   已处理 4500/5087 条记录
+   已处理 4600/5087 条记录
+   已处理 4700/5087 条记录
+   已处理 4800/5087 条记录
+   已处理 4900/5087 条记录
+   已处理 5000/5087 条记录
+   已处理 5087/5087 条记录
+5. 绘图…
+6. 保存边频率数据…
+   完成！
+总用时: 851.2 秒
