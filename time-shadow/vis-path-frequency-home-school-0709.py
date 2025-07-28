@@ -31,9 +31,9 @@ building_gdf = building_gdf[building_gdf['usage'].str.startswith(('411', '412', 
 
 # 颜色映射
 usage_color_map = {
-    '411': '#4daf4a',   # 绿色
-    '412': '#984ea3',   # 紫色
-    '422': '#ff7f00',   # 橙色
+    '411': '#32cbbf',   # 绿色#ff7f00
+    '412': "#984ea3",   # 紫色
+    '422': '#4daf4a',   # 橙色
 }
 default_color = '#cccccc'
 building_gdf['color'] = building_gdf['usage'].apply(lambda u: usage_color_map.get(u[:3], default_color))
