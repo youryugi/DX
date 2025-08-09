@@ -101,7 +101,9 @@ shadow_union = unary_union(shadow_gdf.geometry)
 # -------------------------
 # 绘图
 # -------------------------
-plt.rcParams['font.family'] = 'SimHei'
+plt.rcParams['pdf.fonttype'] = 42  # TrueType 而不是 Type 3
+plt.rcParams['ps.fonttype'] = 42
+plt.rcParams['font.family'] = 'Arial'
 fig, ax = plt.subplots(figsize=(12, 8))
 
 bounds = building_gdf.total_bounds
@@ -229,7 +231,6 @@ def calc_shadow_stats(route_gdf):
 # UI 控件
 # -------------------------
 initial_coef = 1
-plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.subplots_adjust(left=0.1, bottom=0.3)
 
 ax_coef = plt.axes([0.1, 0.1, 0.65, 0.03])

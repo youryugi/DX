@@ -32,8 +32,8 @@ end_x, end_y = 34.63280878029725, 135.52086277042565
 # -------------------------
 # 数据加载与坐标处理
 # -------------------------
-building_gml_file = r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\bldg\51357451_bldg_6697_op.gml"
-road_gml_file = r"C:\Users\79152\Desktop\OthersProgramme\DX\time-shadow\tran\51357451_tran_6697_op.gml"
+building_gml_file = r"..\time-shadow\bldg\51357451_bldg_6697_op.gml"
+road_gml_file = r"..\time-shadow\tran\51357451_tran_6697_op.gml"
 
 building_gdf = gpd.read_file(building_gml_file)
 road_gdf = gpd.read_file(road_gml_file)
@@ -122,7 +122,7 @@ shadow_gdf = building_gdf.dropna(subset=['shadow']).set_geometry('shadow')
 # -------------------------
 # 准备绘图
 # -------------------------
-plt.rcParams['font.family'] = 'SimHei'
+plt.rcParams['font.family'] = 'Arial'
 fig, ax = plt.subplots(figsize=(12, 8))
 
 bounds = building_gdf.total_bounds
@@ -266,7 +266,6 @@ def update_cool_route(coef):
     return new_cool_route_gdf
 
 initial_coef = 1
-plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.subplots_adjust(left=0.1, bottom=0.3)
 
 ax_coef = plt.axes([0.1, 0.1, 0.65, 0.03])
