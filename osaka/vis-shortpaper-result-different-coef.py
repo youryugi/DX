@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 bigfontsize=14
+plt.rcParams['pdf.fonttype'] = 42  # TrueType 而不是 Type 3
+plt.rcParams['ps.fonttype'] = 42
+plt.rcParams['font.family'] = 'Arial'
 # 数据准备
 labels = ['α=0\n(Shortest route) ', 'α=0.1', 'α=0.2', 'α = 0.3 to 0.9 \n(step 0.1)', 'α=1']
 sunny_lengths = [860, 570, 507, 504, 495]
