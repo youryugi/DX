@@ -48,7 +48,7 @@ if road_gdf.crs.to_epsg() != 6669:
 # 计算太阳高度角和方位角
 # -------------------------
 city = LocationInfo(name="Osaka", region="Japan", timezone="Asia/Tokyo", latitude=34.6937, longitude=135.5023)
-date_time = datetime(2024, 12, 5, 13, 10, tzinfo=timezone(timedelta(hours=9)))
+date_time = datetime(2025, 8, 4, 15, 00, tzinfo=timezone(timedelta(hours=9)))
 
 solar_elevation = elevation(city.observer, date_time)
 solar_azimuth = azimuth(city.observer, date_time)
