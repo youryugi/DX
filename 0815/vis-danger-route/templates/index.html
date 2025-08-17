@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8"/>
+  <title>安全路径规划 (Flask + Leaflet)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+  <style>
+    #map { height: 85vh; }
+    .toolbar { margin: 8px 0; display: flex; gap: 8px; align-items: center; }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="pickStart">选择起点</button>
+    <button id="pickEnd">选择终点</button>
+    <label>β:
+      <input id="beta" type="number" step="0.1" min="0" max="1" value="0.3" style="width:70px;">
+    </label>
+    <button id="compute">计算路径（最短+避险）</button>
+    <span id="info"></span>
+    <button id="toggleHeat">显示事故热力图</button>
+  </div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script>
+    // —— 视角持久化：从 localStorage 恢复 ——
+    const LS_KEY = "map_view_v1";
+    const saved = JSON.parse(localStorage.getItem(LS_KEY) || "null");
+
+    const defaultCenter = [{{ center_lat }}, {{ center_lng }}];
+    const defaultZoom   = {{ default_zoom }};
+    const startView = saved?.center && saved?.zoom ? {center: saved.center, zoom: saved.zoom}
+                                                   : {center: defaultCenter, zoom: defaultZoom};
+
+    const map = L.map('map').setView(startView.center, startView.zoom);
+
+    // OSM 底图
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // —— 将视角变化保存到 localStorage（不刷新就不会丢） ——
+    map.on('moveend zoomend', () => {
+      const c = map.getCenter();
+      localStorage.setItem(LS_KEY, JSON.stringify({center: [c.lat, c.lng], zoom: map.getZoom()}));
+    });
+
+    // 选点模式
+    let selectMode = null;
+    let startMarker = null, endMarker = null;
+
+    document.getElementById('pickStart').onclick = () => { selectMode = 'start'; };
+    document.getElementById('pickEnd').onclick   = () => { selectMode = 'end'; };
+
+    map.on('click', (e) => {
+      if (!selectMode) return;
+      const latlng = e.latlng;
+      if (selectMode === 'start') {
+        if (startMarker) map.removeLayer(startMarker);
+        startMarker = L.marker(latlng, {title:'起点'}).addTo(map);
+      } else {
+        if (endMarker) map.removeLayer(endMarker);
+        endMarker = L.marker(latlng, {title:'终点', icon: new L.Icon.Default()}).addTo(map);
+      }
+      selectMode = null;
+    });
+
+    // 路线图层（重用，不 new 地图）
+    let routeLayer = null;
+
+    document.getElementById('compute').onclick = async () => {
+      if (!startMarker || !endMarker) {
+        document.getElementById('info').textContent = '请先选择起点和终点。';
+        return;
+      }
+      document.getElementById('info').textContent = '计算中…';
+
+      const beta = parseFloat(document.getElementById('beta').value || '0.1');
+      const payload = {
+        start: [startMarker.getLatLng().lat, startMarker.getLatLng().lng],
+        end:   [endMarker.getLatLng().lat,   endMarker.getLatLng().lng],
+        beta: beta
+      };
+
+      const res = await fetch('/route', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+      const geojson = await res.json();
+
+      // 清理旧图层，添加新结果（不动视角）
+      if (routeLayer) { map.removeLayer(routeLayer); }
+      routeLayer = L.geoJSON(geojson, {
+        style: f => f.properties.name === 'safe' ? {weight:4, opacity:0.9, color:'green'}
+                                                 : {weight:4, opacity:0.8, color:'red'}
+      }).addTo(map);
+
+      // 也可以只在第一次绘制时 fitBounds；如需，请取消下行注释并加个“只执行一次”的条件：
+      // map.fitBounds(routeLayer.getBounds());
+
+      // 简短信息
+      // 简短信息（带图示）
+      const short = geojson.features.find(f => f.properties.name==='short');
+      const safe  = geojson.features.find(f => f.properties.name==='safe');
+
+      const lineIcon = (color) =>
+        `<svg width="26" height="10" viewBox="0 0 26 10" style="vertical-align:middle">
+           <line x1="2" y1="5" x2="24" y2="5" stroke="${color}" stroke-width="4" stroke-linecap="round"/>
+         </svg>`;
+
+      document.getElementById('info').innerHTML =
+        `${lineIcon('red')} 最短&nbsp;${(short.properties.length_m/1000).toFixed(2)}km（事故${short.properties.accidents_sum}）&nbsp;&nbsp;|&nbsp;&nbsp;` +
+        `${lineIcon('green')} 避险&nbsp;β=${beta}&nbsp;${(safe.properties.length_m/1000).toFixed(2)}km（事故${safe.properties.accidents_sum}）`;
+    };
+
+  </script>
+  <script>
+    // 为热力图准备一个更靠底层的 pane，避免遮住路线
+    map.createPane('heatPane');
+    map.getPane('heatPane').style.zIndex = 200;  // 默认 polyline 在 400 左右
+
+    let heatLayer = null;
+    let heatOn = false;
+
+    // 切换按钮逻辑
+    document.getElementById('toggleHeat').onclick = async function () {
+      if (!heatLayer) {
+        // 第一次点击时从后端拉点位
+        const res = await fetch('/accidents');
+        const points = await res.json(); // [[lat,lng], ...] 或 [[lat,lng,weight], ...]
+
+        // 可按需调半径/模糊等参数
+        heatLayer = L.heatLayer(points, {
+          radius: 7,   // 你可以微调
+          minOpacity: 0.2,
+          blur: 8,
+          maxZoom: 12,
+          pane: 'heatPane'
+        });
+      }
+
+      if (heatOn) {
+        map.removeLayer(heatLayer);
+        heatOn = false;
+        this.textContent = '显示事故热力图';
+      } else {
+        heatLayer.addTo(map);
+        heatOn = true;
+        this.textContent = '隐藏事故热力图';
+      }
+    };
+  </script>
+
+</body>
+<script src="https://unpkg.com/leaflet.heat/dist/leaflet-heat.js"></script>
+</html>
