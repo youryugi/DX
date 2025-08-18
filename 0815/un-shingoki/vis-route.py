@@ -128,6 +128,6 @@ def generate_maps_for_folder(src_folder, out_folder, tiles="OpenStreetMap"):
 
 if __name__ == "__main__":
     # Windows 示例：
-    src = r"C:\Users\79152\Desktop\github\DX\0815\un-shingoki\gpsdata-csv"      # 放你的 CSV 的文件夹
-    dst = r"C:\Users\79152\Desktop\github\DX\0815\un-shingoki\vis-route"  # 输出 HTML 地图的文件夹
+    src = r"gpsdata-csv"      # 放你的 CSV 的文件夹
+    dst = r"vis-route"  # 输出 HTML 地图的文件夹
     generate_maps_for_folder(src, dst, tiles="OpenStreetMap")

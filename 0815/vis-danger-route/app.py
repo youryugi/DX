@@ -5,7 +5,7 @@ import osmnx as ox
 app = Flask(__name__)
 
 # 预加载路网（只加载一次）
-GRAPHML_PATH = r"templates/road_graph_with_accidents.graphml"
+GRAPHML_PATH = r"templates\road_graph_with_accidents.graphml"
 G_proj = ox.load_graphml(GRAPHML_PATH)
 G_wgs  = ox.project_graph(G_proj, to_crs="EPSG:4326")
 print("jiazai wancheng ")

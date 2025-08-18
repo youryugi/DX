@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
   <meta charset="utf-8"/>
-  <title>安全路径规划 (Flask + Leaflet)</title>
+  <title>Safer route planning</title>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
@@ -13,14 +13,19 @@
 </head>
 <body>
   <div class="toolbar">
-    <button id="pickStart">选择起点</button>
-    <button id="pickEnd">选择终点</button>
+    <button id="pickStart">Select start point</button>
+    <button id="pickEnd">Select end point</button>
     <label>β:
       <input id="beta" type="number" step="0.1" min="0" max="1" value="0.3" style="width:70px;">
     </label>
-    <button id="compute">计算路径（最短+避险）</button>
+    <br>
+    <small style="color:gray;">
+      Bigger β → safer but longer
+    </small>
+    </label>
+    <button id="compute">Calculate route (the shortest / safer)</button>
     <span id="info"></span>
-    <button id="toggleHeat">显示事故热力图</button>
+    <button id="toggleHeat">Show accident heat map</button>
   </div>
   <div id="map"></div>
 
@@ -76,7 +81,7 @@
         document.getElementById('info').textContent = '请先选择起点和终点。';
         return;
       }
-      document.getElementById('info').textContent = '计算中…';
+      document.getElementById('info').textContent = 'Calcaulating…';
 
       const beta = parseFloat(document.getElementById('beta').value || '0.1');
       const payload = {
@@ -108,9 +113,16 @@
            <line x1="2" y1="5" x2="24" y2="5" stroke="${color}" stroke-width="4" stroke-linecap="round"/>
          </svg>`;
 
+      const shortLen = (short.properties.length_m/1000).toFixed(2);
+      const safeLen  = (safe.properties.length_m/1000).toFixed(2);
+      const shortAcc = short.properties.accidents_sum;
+      const safeAcc  = safe.properties.accidents_sum;
+
       document.getElementById('info').innerHTML =
-        `${lineIcon('red')} 最短&nbsp;${(short.properties.length_m/1000).toFixed(2)}km（事故${short.properties.accidents_sum}）&nbsp;&nbsp;|&nbsp;&nbsp;` +
-        `${lineIcon('green')} 避险&nbsp;β=${beta}&nbsp;${(safe.properties.length_m/1000).toFixed(2)}km（事故${safe.properties.accidents_sum}）`;
+        `${lineIcon('red')} The shortest route: ${shortLen} km（The number of accidents: ${shortAcc}）<br>` +
+        `${lineIcon('green')} The safer route: ${safeLen} km（The number of accidents: ${safeAcc}）<br>` +
+        `Increased distance: ${(safeLen - shortLen).toFixed(2)} km &nbsp;|&nbsp; Accidents avoided: ${shortAcc - safeAcc}`;
+
     };
 
   </script>
@@ -142,11 +154,11 @@
       if (heatOn) {
         map.removeLayer(heatLayer);
         heatOn = false;
-        this.textContent = '显示事故热力图';
+        this.textContent = 'Show accident heat map';
       } else {
         heatLayer.addTo(map);
         heatOn = true;
-        this.textContent = '隐藏事故热力图';
+        this.textContent = 'Hide accident heat map';
       }
     };
   </script>

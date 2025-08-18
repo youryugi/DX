@@ -123,6 +123,13 @@ for name, cfg in TILES.items():
 # 5) 添加事故点（聚合）
 fg_points = folium.FeatureGroup(name="事故点", show=True)
 cluster = MarkerCluster(name="事故点(聚合)", show=True)
+# cluster = MarkerCluster(
+#     name="事故点(聚合)",
+#     show=True,
+#     maxClusterRadius=60,
+#     disableClusteringAtZoom=15,
+#     spiderfyOnMaxZoom=True,
+#     showCoverageOnHover=False)
 for _, row in df.iterrows():
     lat = float(row[LAT_COL])
     lon = float(row[LON_COL])
