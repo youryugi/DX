@@ -171,9 +171,9 @@ else:
 fig, ax = plt.subplots(figsize=(12, 8))
 ox.plot_graph(G_proj, ax=ax, show=False, close=False, edge_color='lightgray', node_size=0, edge_linewidth=0.5)
 
-if 'road_gdf' in locals():
-    road_gdf = road_gdf.to_crs(epsg=6669)
-    road_gdf.plot(ax=ax, color='black', linewidth=1, alpha=0.5, label='Road')
+# if 'road_gdf' in locals():
+#     road_gdf = road_gdf.to_crs(epsg=6669)
+#     road_gdf.plot(ax=ax, color='black', linewidth=1, alpha=0.5, label='Road')
 
 building_gdf.plot(
     ax=ax,
