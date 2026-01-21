@@ -103,7 +103,7 @@ shadow_union = unary_union(shadow_gdf.geometry)
 # -------------------------
 plt.rcParams['pdf.fonttype'] = 42  # TrueType 而不是 Type 3
 plt.rcParams['ps.fonttype'] = 42
-plt.rcParams['font.family'] = 'Arial'
+plt.rcParams['font.family'] = 'Arial'#SimHei支持日文
 fig, ax = plt.subplots(figsize=(12, 8))
 
 bounds = building_gdf.total_bounds
